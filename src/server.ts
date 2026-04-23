@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
 import { renderAdminPage } from '@/admin/page.js';
@@ -47,6 +48,16 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   // Cast to the default FastifyInstance type so that register helpers typed
   // against FastifyBaseLogger (the Fastify default) accept this instance.
   const app = rawApp as unknown as FastifyInstance;
+
+  // Permissive CORS: dev-oidc is a development tool; any localhost origin
+  // (Console dev servers, test harnesses, etc.) needs to fetch the discovery
+  // doc + JWKS + token endpoints from JavaScript. `origin: true` reflects
+  // whatever Origin the browser sent — acceptable for a dev-only service.
+  await app.register(cors, {
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  });
 
   await app.register(formbody);
 
