@@ -86,10 +86,20 @@ describe('renderAdminPage', () => {
     expect(html).toContain('Cancel');
   });
 
-  it('the "Add profile" form at the bottom does NOT show a Cancel button (not in a dialog)', () => {
+  it('Add profile lives in its own modal, opened by a button next to the Profiles heading', () => {
     const html = renderAdminPage(config());
-    // Count Cancel buttons — one per dialog (2) but none for the "Add" form.
+    // Header-row button opens the add dialog — not an inline form at the bottom.
+    expect(html).toContain('data-open-dialog="add-dialog"');
+    expect(html).toMatch(/<dialog id="add-dialog"/);
+    // The old inline "Add profile" section is gone — only the dialog header
+    // uses that phrase now.
+    expect(html).not.toMatch(/<h2>Add profile<\/h2>/);
+  });
+
+  it('every profile form (edit and add) has a Cancel button; all forms are inside a dialog', () => {
+    const html = renderAdminPage(config());
+    // 2 edit dialogs + 1 add dialog = 3 forms, each with Cancel.
     const cancelCount = (html.match(/>Cancel</g) ?? []).length;
-    expect(cancelCount).toBe(2);
+    expect(cancelCount).toBe(3);
   });
 });

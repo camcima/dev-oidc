@@ -20,6 +20,10 @@ const STYLES = `
   h1 { font-size: 1.5rem; margin: 0 0 1.5rem; }
   h2 { font-size: 1.125rem; margin: 2rem 0 1rem; }
   table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d0d5dd; border-radius: 8px; overflow: hidden; }
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin: 2rem 0 1rem; }
+  .section-head h2 { margin: 0; }
+  .primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .primary:hover { background: #155ac7; border-color: #155ac7; }
   th, td { text-align: left; padding: 0.75rem 1rem; border-bottom: 1px solid #eaecf0; vertical-align: middle; }
   th { background: #f9fafb; font-weight: 600; font-size: 0.875rem; color: #667085; }
   tr:last-child td { border-bottom: none; }
@@ -55,18 +59,28 @@ const CLIENT_SCRIPT = `
       window.location.reload();
     });
 
-    // Open / close the per-profile edit dialog.
+    // Open / close dialogs.
+    //   data-open-dialog="<id>" opens <dialog id="<id>">.
+    //   data-dialog-close inside a dialog closes its parent dialog.
+    //   data-edit-dialog="<profileId>" is syntactic sugar for the per-profile
+    //   edit dialogs, which follow the edit-dialog-<id> naming convention.
     document.body.addEventListener('click', (ev) => {
       const target = ev.target;
       if (!(target instanceof HTMLElement)) return;
 
-      const opener = target.closest('[data-edit-dialog]');
-      if (opener instanceof HTMLElement) {
-        const id = opener.dataset.editDialog;
+      const edit = target.closest('[data-edit-dialog]');
+      if (edit instanceof HTMLElement) {
+        const id = edit.dataset.editDialog;
         const dialog = id ? document.getElementById('edit-dialog-' + id) : null;
-        if (dialog instanceof HTMLDialogElement) {
-          dialog.showModal();
-        }
+        if (dialog instanceof HTMLDialogElement) dialog.showModal();
+        return;
+      }
+
+      const opener = target.closest('[data-open-dialog]');
+      if (opener instanceof HTMLElement) {
+        const id = opener.dataset.openDialog;
+        const dialog = id ? document.getElementById(id) : null;
+        if (dialog instanceof HTMLDialogElement) dialog.showModal();
         return;
       }
 
@@ -137,7 +151,12 @@ function AdminPage({ config }: AdminPageProps): ReactElement {
           </a>
         </div>
 
-        <h2>Profiles ({config.profiles.length})</h2>
+        <div className="section-head">
+          <h2>Profiles ({config.profiles.length})</h2>
+          <button type="button" className="primary" data-open-dialog="add-dialog">
+            Add profile
+          </button>
+        </div>
         <table>
           <thead>
             <tr>
@@ -155,8 +174,7 @@ function AdminPage({ config }: AdminPageProps): ReactElement {
           </tbody>
         </table>
 
-        <h2>Add profile</h2>
-        <ProfileForm />
+        <AddDialog />
 
         <h2>Raw config</h2>
         {/* Raw config JSON is injected post-render via string replace in renderAdminPage */}
@@ -165,6 +183,20 @@ function AdminPage({ config }: AdminPageProps): ReactElement {
         <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }} />
       </body>
     </html>
+  );
+}
+
+function AddDialog(): ReactElement {
+  return (
+    <dialog id="add-dialog" className="edit-dialog">
+      <div className="dialog-head">
+        <h3>Add profile</h3>
+        <button type="button" data-dialog-close aria-label="Close">
+          ✕
+        </button>
+      </div>
+      <ProfileForm showCancel />
+    </dialog>
   );
 }
 
