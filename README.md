@@ -4,6 +4,10 @@ A minimal, config-driven OIDC provider for local development.
 
 **Status:** Pre-release. Intended to ship to npm/OCI registries in a future milestone.
 
+[![CI](https://github.com/OWNER/dev-oidc/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/dev-oidc/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/dev-oidc.svg)](https://www.npmjs.com/package/dev-oidc)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+
 ## Why
 
 When you build an app that integrates with an OIDC provider (Azure AD / Entra, Auth0, Keycloak, Okta), local iteration is painful: you either bypass auth in dev (drift between dev and prod) or stand up a full IdP (slow). `dev-oidc` sits where the real IdP would — your app runs its real auth code path (redirect, token exchange, JWT verify, refresh) against a mock that you configure via a JSON file.
@@ -114,6 +118,14 @@ No authentication on `/admin` — the default localhost bind is the protection. 
 - [`oauth2-mock-server`](https://github.com/axa-group/oauth2-mock-server) — Node, lighter footprint, programmatic hooks. Use if you don't need a login UI and want to drive auth programmatically in tests.
 - [`node-oidc-provider`](https://github.com/panva/node-oidc-provider) — production-grade OIDC provider. Use if you want to build a real IdP, not a dev tool.
 - **dev-oidc (this)** — Node, minimal, config-driven, login UI that lets you pick a profile with one click. Use if that's what you want.
+
+## Contributing
+
+Contributions welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, style, and commit conventions. Security issues: please read [SECURITY.md](./SECURITY.md) first.
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md).
 
 ## License
 

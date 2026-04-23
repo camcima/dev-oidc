@@ -2,7 +2,32 @@
   "name": "dev-oidc",
   "version": "0.1.0-alpha.1",
   "description": "A minimal, config-driven OIDC provider for local development.",
+  "keywords": [
+    "oidc",
+    "openid-connect",
+    "oauth2",
+    "mock",
+    "dev",
+    "development",
+    "testing",
+    "authentication",
+    "jwt",
+    "pkce"
+  ],
+  "homepage": "https://github.com/OWNER/dev-oidc#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OWNER/dev-oidc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/OWNER/dev-oidc/issues"
+  },
   "license": "MIT",
+  "author": "dev-oidc contributors",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
