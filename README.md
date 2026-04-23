@@ -35,12 +35,12 @@ Pick one of the three run modes below (Docker, CLI, programmatic). All three rea
 
 Wherever your app reads its OIDC settings (usually env vars), swap the provider URLs for dev-oidc's:
 
-| Your app's config key | Production value              | Dev value                                         |
-| --------------------- | ----------------------------- | ------------------------------------------------- |
-| `OIDC_ISSUER` / `authority` | `https://login.microsoftonline.com/<tenant>/v2.0` | `http://localhost:8080` |
-| `OIDC_CLIENT_ID`      | your app registration ID      | matches `clients[].clientId` in dev-oidc config   |
-| `OIDC_AUDIENCE`       | your API's audience           | matches `clients[].audience` in dev-oidc config   |
-| Redirect URI          | your prod callback URL        | matches `clients[].redirectUris[]` in dev-oidc config |
+| Your app's config key       | Production value                                  | Dev value                                             |
+| --------------------------- | ------------------------------------------------- | ----------------------------------------------------- |
+| `OIDC_ISSUER` / `authority` | `https://login.microsoftonline.com/<tenant>/v2.0` | `http://localhost:8080`                               |
+| `OIDC_CLIENT_ID`            | your app registration ID                          | matches `clients[].clientId` in dev-oidc config       |
+| `OIDC_AUDIENCE`             | your API's audience                               | matches `clients[].audience` in dev-oidc config       |
+| Redirect URI                | your prod callback URL                            | matches `clients[].redirectUris[]` in dev-oidc config |
 
 ### 3. Use the login flow
 
@@ -105,6 +105,7 @@ volumes:
 ```
 
 **Important notes:**
+
 - Use `http://dev-oidc:8080` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS.
 - Use `http://localhost:8080` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names.
 - Your dev-oidc config's `issuer` must match whichever URL the JWT's recipients expect. For apps where both browser and server code need to reach dev-oidc, `http://localhost:8080` is usually the right choice (browsers require it, servers can still reach it via the mapped port).
@@ -137,46 +138,51 @@ Every field in `dev-oidc.config.json`:
 
 ```jsonc
 {
-  "issuer": "http://localhost:8080",         // Required. Base URL of this instance.
-  "port": 8080,                              // Default 8080. TCP port to listen on.
-  "host": "127.0.0.1",                       // Default 127.0.0.1. Use 0.0.0.0 in containers.
+  "issuer": "http://localhost:8080", // Required. Base URL of this instance.
+  "port": 8080, // Default 8080. TCP port to listen on.
+  "host": "127.0.0.1", // Default 127.0.0.1. Use 0.0.0.0 in containers.
   "signingKey": {
-    "kid": "dev-key-1",                      // Required. Key ID surfaced in JWKS + JWT header.
-    "alg": "RS256",                          // Default "RS256". Only RS256 supported today.
-    "source": "generate"                      // Default "generate" (ephemeral) or "file:<path>" (persistent).
+    "kid": "dev-key-1", // Required. Key ID surfaced in JWKS + JWT header.
+    "alg": "RS256", // Default "RS256". Only RS256 supported today.
+    "source": "generate", // Default "generate" (ephemeral) or "file:<path>" (persistent).
   },
-  "clients": [                               // Required. One or more registered clients.
+  "clients": [
+    // Required. One or more registered clients.
     {
-      "clientId": "my-app",                  // What your app sends as `client_id`.
-      "redirectUris": [                      // Exact-match allowlist.
-        "http://localhost:5173/auth/callback"
+      "clientId": "my-app", // What your app sends as `client_id`.
+      "redirectUris": [
+        // Exact-match allowlist.
+        "http://localhost:5173/auth/callback",
       ],
-      "postLogoutRedirectUris": [            // Optional. Default [].
-        "http://localhost:5173/"
+      "postLogoutRedirectUris": [
+        // Optional. Default [].
+        "http://localhost:5173/",
       ],
-      "audience": "my-api"                   // Required. Populates the JWT `aud` claim.
-    }
+      "audience": "my-api", // Required. Populates the JWT `aud` claim.
+    },
   ],
-  "subjectClaim": "sub",                     // Default "sub". Use "oid" for Azure AD / Entra compat.
-  "tokenTtlSeconds": 900,                    // Default 900. Access-token lifetime.
-  "refreshTokenTtlSeconds": 28800,           // Default 28800. Refresh-token lifetime.
+  "subjectClaim": "sub", // Default "sub". Use "oid" for Azure AD / Entra compat.
+  "tokenTtlSeconds": 900, // Default 900. Access-token lifetime.
+  "refreshTokenTtlSeconds": 28800, // Default 28800. Refresh-token lifetime.
   "branding": {
-    "title": "Dev OIDC Login",               // Default "Dev OIDC Login".
-    "accentColor": "#1f6feb",                // Default #1f6feb.
-    "logoUrl": null                          // Default null.
+    "title": "Dev OIDC Login", // Default "Dev OIDC Login".
+    "accentColor": "#1f6feb", // Default #1f6feb.
+    "logoUrl": null, // Default null.
   },
-  "profiles": [                              // The users offered on the login page.
+  "profiles": [
+    // The users offered on the login page.
     {
-      "id": "alice",                         // Goes into the `sub` (or `oid`) claim.
+      "id": "alice", // Goes into the `sub` (or `oid`) claim.
       "displayName": "Alice Developer",
       "email": "alice@example.com",
-      "avatar": null,                        // Optional URL, default null.
-      "claims": {                            // Optional. Merged into every JWT for this profile.
+      "avatar": null, // Optional URL, default null.
+      "claims": {
+        // Optional. Merged into every JWT for this profile.
         "department": "Engineering",
-        "platformRole": "admin"
-      }
-    }
-  ]
+        "platformRole": "admin",
+      },
+    },
+  ],
 }
 ```
 
@@ -190,7 +196,7 @@ To persist the key across restarts, set `source` to `"file:<path>"`:
 
 ```jsonc
 {
-  "signingKey": { "kid": "dev-key-1", "source": "file:/data/signing-key.json" }
+  "signingKey": { "kid": "dev-key-1", "source": "file:/data/signing-key.json" },
 }
 ```
 

@@ -62,4 +62,34 @@ describe('renderAdminPage', () => {
     expect(html).toContain('/admin/events');
     expect(html).toContain('EventSource');
   });
+
+  it('renders Edit and Delete buttons side-by-side in a flex container (no details/summary)', () => {
+    const html = renderAdminPage(config());
+    // Actions cell uses a flex container, NOT a native disclosure widget.
+    expect(html).toContain('class="actions"');
+    expect(html).not.toMatch(/<details\b/);
+    expect(html).not.toMatch(/<summary\b/);
+  });
+
+  it('renders a modal <dialog> per profile keyed by id', () => {
+    const html = renderAdminPage(config());
+    expect(html).toMatch(/<dialog id="edit-dialog-alice"/);
+    expect(html).toMatch(/<dialog id="edit-dialog-bob"/);
+    // Edit button triggers the dialog via data attribute.
+    expect(html).toMatch(/data-edit-dialog="alice"/);
+    expect(html).toMatch(/data-edit-dialog="bob"/);
+  });
+
+  it('each edit dialog includes a Cancel button that closes the dialog', () => {
+    const html = renderAdminPage(config());
+    expect(html).toContain('data-dialog-close');
+    expect(html).toContain('Cancel');
+  });
+
+  it('the "Add profile" form at the bottom does NOT show a Cancel button (not in a dialog)', () => {
+    const html = renderAdminPage(config());
+    // Count Cancel buttons — one per dialog (2) but none for the "Add" form.
+    const cancelCount = (html.match(/>Cancel</g) ?? []).length;
+    expect(cancelCount).toBe(2);
+  });
 });
