@@ -1,16 +1,19 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import formbody from '@fastify/formbody';
+import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
+import { renderAdminPage } from '@/admin/page.js';
+import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig, type RuntimeConfig } from '@/config/runtime.js';
 import { watchConfig, type ConfigWatcher } from '@/config/watcher.js';
+import { createLogger, type DevOidcLogger } from '@/logger.js';
+import { registerAuthorize } from '@/oidc/authorize.js';
+import { registerComplete } from '@/oidc/complete.js';
 import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import { createKeyMaterial, type KeyMaterial } from '@/oidc/keys.js';
 import { createCodeStore, type CodeStore } from '@/oidc/codes.js';
 import { createPendingAuthStore, type PendingAuthStore } from '@/oidc/pending.js';
-import { createLogger, type DevOidcLogger } from '@/logger.js';
-import { registerAuthorize } from '@/oidc/authorize.js';
-import { registerComplete } from '@/oidc/complete.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 
@@ -32,6 +35,7 @@ export interface DevOidcServer {
 export async function createDevOidcServer(options: CreateServerOptions): Promise<DevOidcServer> {
   const logger = options.logger ?? createLogger();
   const runtime = createRuntimeConfig(options.config);
+  const eventsEmitter: EventsEmitter = createEventsEmitter();
   const keyMaterial = await createKeyMaterial(options.config.signingKey);
   const codes = createCodeStore({
     ttlMs: 60_000,
@@ -59,11 +63,20 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   registerToken(app, { runtime, codes, keyMaterial });
   registerLogout(app, { runtime });
 
+  if (options.configFilePath) {
+    registerProfilesRoutes(app, { runtime, configFilePath: options.configFilePath });
+    registerEventsRoute(app, { emitter: eventsEmitter });
+    app.get('/admin', async (_request, reply) => {
+      return reply.code(200).type('text/html; charset=utf-8').send(renderAdminPage(runtime.get()));
+    });
+  }
+
   let watcher: ConfigWatcher | null = null;
   if (options.configFilePath) {
     watcher = await watchConfig(options.configFilePath, {
       onReload: (config) => {
         runtime.set(config);
+        eventsEmitter.emit({ type: 'config-changed' });
         logger.info({ issuer: config.issuer }, 'config reloaded');
       },
       onError: (err) => logger.warn({ err }, 'config reload failed; keeping previous config'),
