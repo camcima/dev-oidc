@@ -7,3 +7,6 @@ pre-commit:
     format:
       glob: '**/*.{ts,tsx,js,json,md,yml,yaml}'
       run: npm run format:check
+    typecheck:
+      glob: '{src,tests}/**/*.{ts,tsx}'
+      run: npm run typecheck
