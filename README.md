@@ -90,10 +90,21 @@ See `src/config/schema.ts` for the authoritative zod schema. Key fields:
 
 All flows require **PKCE with S256**. No client secrets. No implicit flow.
 
+## Admin UI
+
+Visit `http://localhost:8080/admin` (dev-only by default, localhost bind). From there you can:
+
+- View all configured profiles.
+- Add, edit, or delete profiles. Changes are written atomically to the JSON config file.
+- View the full raw config.
+
+The admin UI also subscribes to a Server-Sent Events stream at `/admin/events`. When the JSON config file is edited externally (by another tool, another human, or a coding agent), a "Config changed on disk" banner appears so you can reload.
+
+No authentication on `/admin` — the default localhost bind is the protection. If you run dev-oidc somewhere reachable, ensure network-level access controls are in place.
+
 ## Limitations
 
 - **Development only.** Tokens are signed by a key generated at startup; a restart invalidates every token.
-- **No admin UI yet** — profile management is planned; for now, edit the JSON config directly (or let a tool do it — the server hot-reloads on file changes).
 - **Single tenant.** One issuer per instance.
 - **No client authentication.** The token endpoint trusts `client_id` in the request body. Dev-only.
 
