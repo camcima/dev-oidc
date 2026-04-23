@@ -13,7 +13,11 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=builder /app/dist ./dist
-RUN chown -R node:node /app
+# Create /data (for file-backed signing key persistence) and give it to
+# `node` so anonymous/named volumes mounted here are owned by the runtime
+# user. Without this, mounting an empty volume at /data leaves it
+# root-owned and the node process cannot write the signing key.
+RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 
 EXPOSE 8080
