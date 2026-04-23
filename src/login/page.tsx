@@ -48,6 +48,9 @@ function LoginPage({
             </form>
           ))}
         </div>
+        <a className="admin-link" href="/admin">
+          Manage profiles →
+        </a>
       </body>
     </html>
   );

@@ -19,4 +19,10 @@ export const STATIC_STYLES = `
   button.tile:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tile .name { font-weight: 600; margin-bottom: 0.25rem; }
   .tile .email { color: #667085; font-size: 0.875rem; }
+  .admin-link {
+    display: inline-block; margin-top: 2rem;
+    color: #667085; font-size: 0.875rem; text-decoration: none;
+    border-bottom: 1px dashed #c0c6cf;
+  }
+  .admin-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
 `.trim();

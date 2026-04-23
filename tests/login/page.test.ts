@@ -80,4 +80,15 @@ describe('renderLoginPage', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
+
+  it('includes a link to the admin UI', () => {
+    const html = renderLoginPage({
+      pendingAuthId: 'abc123',
+      profiles,
+      branding,
+      actionUrl: '/authorize/complete',
+    });
+    expect(html).toMatch(/<a[^>]+class="admin-link"[^>]+href="\/admin"/);
+    expect(html).toContain('Manage profiles');
+  });
 });
