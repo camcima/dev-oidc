@@ -10,3 +10,8 @@ pre-commit:
     typecheck:
       glob: '{src,tests}/**/*.{ts,tsx}'
       run: npm run typecheck
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx --no -- commitlint --edit {1}
