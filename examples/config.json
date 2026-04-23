@@ -1,0 +1,24 @@
+{
+  "issuer": "http://localhost:8080",
+  "signingKey": { "kid": "k1" },
+  "clients": [
+    {
+      "clientId": "my-app",
+      "redirectUris": ["http://localhost:5173/auth/callback"],
+      "audience": "my-api"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "alice",
+      "displayName": "Alice",
+      "email": "alice@example.com"
+    },
+    {
+      "id": "bob",
+      "displayName": "Bob",
+      "email": "bob@example.com",
+      "claims": { "role": "admin" }
+    }
+  ]
+}
