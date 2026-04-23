@@ -1,0 +1,9 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      glob: '{src,tests}/**/*.{ts,tsx}'
+      run: npm run lint
+    format:
+      glob: '**/*.{ts,tsx,js,json,md,yml,yaml}'
+      run: npm run format:check

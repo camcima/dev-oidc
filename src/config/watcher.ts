@@ -12,10 +12,7 @@ export interface ConfigWatcher {
   close: () => Promise<void>;
 }
 
-export async function watchConfig(
-  filePath: string,
-  options: WatchOptions,
-): Promise<ConfigWatcher> {
+export async function watchConfig(filePath: string, options: WatchOptions): Promise<ConfigWatcher> {
   const debounceMs = options.debounceMs ?? 200;
   const watcher: FSWatcher = chokidar.watch(filePath, {
     ignoreInitial: true,

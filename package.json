@@ -16,7 +16,11 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=22.0.0"
   },
@@ -26,6 +30,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint 'src/**/*.{ts,tsx}' 'tests/**/*.{ts,tsx}'",
     "lint:fix": "eslint 'src/**/*.{ts,tsx}' 'tests/**/*.{ts,tsx}' --fix",
+    "format": "prettier --write '**/*.{ts,tsx,js,json,md,yml,yaml}' '!**/dist/**' '!**/node_modules/**' '!**/coverage/**' '!**/package-lock.json'",
+    "format:check": "prettier --check '**/*.{ts,tsx,js,json,md,yml,yaml}' '!**/dist/**' '!**/node_modules/**' '!**/coverage/**' '!**/package-lock.json'",
+    "prepare": "lefthook install",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
@@ -47,6 +54,9 @@
     "@types/react-dom": "^19.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "eslint": "^9.27.0",
+    "eslint-config-prettier": "^10.0.0",
+    "lefthook": "^1.10.0",
+    "prettier": "^3.4.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
