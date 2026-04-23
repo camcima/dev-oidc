@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Added
+
+- Permissive CORS on all endpoints so browser-based OIDC clients (`oidc-client-ts`, MSAL.js, etc.) can fetch the discovery doc, JWKS, and token endpoint cross-origin without additional config.
+- File-backed signing key (`signingKey.source: "file:<path>"`). Persists the RSA keypair across restarts so JWTs minted before the restart remain verifiable against the same public key. The file is created on first boot with mode `0600` and reloaded on subsequent boots. Mount a Docker volume at the parent directory to survive image rebuilds.
+- "Manage profiles →" link on the login page jumping to `/admin`.
+- `commitlint` + `commit-msg` lefthook hook enforcing conventional commits for contributors.
+
+### Changed
+
+- README expanded: full-featured `docker-compose.yml` example with volume + healthcheck, "Using dev-oidc in your project" integration walkthrough, every config field documented inline, troubleshooting section, signing-key persistence guide.
+
 ## 0.1.0-alpha.1 - 2026-04-23
 
 ### Added
