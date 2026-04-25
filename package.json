@@ -77,7 +77,8 @@
     "release:all": "npm run release && npm run release:docker",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:ci": "vitest run --coverage --reporter=default --reporter=junit --outputFile.junit=test-report.junit.xml"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",

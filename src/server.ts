@@ -1,36 +1,63 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import path from 'node:path';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
+import { buildAdminAllowedHosts, registerAdminGuard } from '@/admin/guard.js';
 import { renderAdminPage } from '@/admin/page.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import type { Config } from '@/config/schema.js';
-import { createRuntimeConfig, type RuntimeConfig } from '@/config/runtime.js';
+import { createRuntimeConfig } from '@/config/runtime.js';
 import { watchConfig, type ConfigWatcher } from '@/config/watcher.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
 import { registerComplete } from '@/oidc/complete.js';
 import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { buildJwks } from '@/oidc/jwks.js';
-import { createKeyMaterial, type KeyMaterial } from '@/oidc/keys.js';
-import { createCodeStore, type CodeStore } from '@/oidc/codes.js';
-import { createPendingAuthStore, type PendingAuthStore } from '@/oidc/pending.js';
+import { createKeyMaterial } from '@/oidc/keys.js';
+import { createCodeStore } from '@/oidc/codes.js';
+import { createPendingAuthStore } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { renderIndexPage } from '@/index/page.js';
+import { stripTrailingSlash } from '@/hub/issuer.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CreateServerOptions {
   config: Config;
   configFilePath?: string;
+  /**
+   * Issuer URL advertised in the discovery document and embedded as `iss`
+   * in JWTs. When omitted, derived from `publicUrl` (preferred) or
+   * `http://${listenHost}:${listenPort}`. Pass an explicit value for
+   * production-like setups where the URL the relying party uses to fetch
+   * discovery differs from the listen address.
+   */
+  issuer?: string;
+  /**
+   * Listen host & port. Used to build the admin Host-header allowlist (CSRF
+   * + DNS rebinding defense) and as the fallback for the issuer. The CLI
+   * passes the same values it uses for `app.listen`. Defaults are
+   * `127.0.0.1` and `8095` so test callers that use `app.inject` without
+   * binding don't need to pass these.
+   */
+  listenHost?: string;
+  listenPort?: number;
+  publicUrl?: string;
   logger?: DevOidcLogger;
+}
+
+function deriveIssuer(options: CreateServerOptions): string {
+  if (options.issuer) return stripTrailingSlash(options.issuer);
+  if (options.publicUrl) return stripTrailingSlash(options.publicUrl);
+  const host = options.listenHost ?? '127.0.0.1';
+  const port = options.listenPort ?? 8095;
+  return `http://${host}:${port.toString()}`;
 }
 
 export interface DevOidcServer {
   app: FastifyInstance;
-  runtime: RuntimeConfig;
-  keyMaterial: KeyMaterial;
-  codes: CodeStore;
-  pending: PendingAuthStore;
+  tenant: ActiveTenantState;
   close: () => Promise<void>;
 }
 
@@ -38,27 +65,59 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const logger = options.logger ?? createLogger();
   const runtime = createRuntimeConfig(options.config);
   const eventsEmitter: EventsEmitter = createEventsEmitter();
-  runtime.onChange(() => eventsEmitter.emit({ type: 'config-changed' }));
-  const keyMaterial = await createKeyMaterial(options.config.signingKey);
+  runtime.onChange(() => eventsEmitter.emit({ type: 'config-changed', slug: '(legacy)' }));
+
+  const configDir = options.configFilePath
+    ? path.dirname(path.resolve(options.configFilePath))
+    : process.cwd();
+  const keyMaterial = await createKeyMaterial(options.config.signingKey, { configDir });
   const jwksDocument = buildJwks(keyMaterial);
+
   const codes = createCodeStore({
     ttlMs: 60_000,
     refreshTtlMs: options.config.refreshTokenTtlSeconds * 1_000,
   });
   const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
 
-  const app = Fastify({ loggerInstance: logger });
+  let watcher: ConfigWatcher | null = null;
+  if (options.configFilePath) {
+    watcher = await watchConfig(options.configFilePath, {
+      onReload: (config) => {
+        runtime.set(config);
+        logger.info({ slug: '(legacy)' }, 'config reloaded');
+      },
+      onError: (err) => logger.warn({ err }, 'config reload failed; keeping previous config'),
+    });
+  }
 
-  // Permissive CORS: dev-oidc is a development tool; any localhost origin
-  // (Console dev servers, test harnesses, etc.) needs to fetch the discovery
-  // doc + JWKS + token endpoints from JavaScript. `origin: true` reflects
-  // whatever Origin the browser sent — acceptable for a dev-only service.
+  const tenant: ActiveTenantState = {
+    slug: '(legacy)',
+    configPath: options.configFilePath ?? '',
+    status: 'active',
+    config: options.config,
+    runtime,
+    keyMaterial,
+    jwks: jwksDocument,
+    codes,
+    pending,
+    watcher,
+    issuer: deriveIssuer(options),
+  };
+
+  const getTenant = (_req: FastifyRequest): ActiveTenantState => tenant;
+
+  const app = Fastify({ loggerInstance: logger });
+  registerAdminGuard(app, {
+    allowedHosts: buildAdminAllowedHosts({
+      listenHost: options.listenHost ?? '127.0.0.1',
+      listenPort: options.listenPort ?? 8095,
+      publicUrl: options.publicUrl,
+    }),
+  });
   await app.register(cors, {
     origin: true,
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
-
   await app.register(formbody);
 
   app.get('/.well-known/openid-configuration', async () => {
@@ -68,7 +127,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
       ? ['none', 'client_secret_post', 'client_secret_basic']
       : ['none'];
     return buildDiscoveryDocument({
-      issuer: cfg.issuer,
+      issuer: tenant.issuer,
       signingAlg: keyMaterial.alg,
       authMethods,
     });
@@ -81,39 +140,28 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     return reply
       .code(200)
       .type('text/html; charset=utf-8')
-      .send(renderIndexPage({ config: runtime.get(), adminEnabled }));
+      .send(renderIndexPage({ tenant, adminEnabled }));
   });
 
-  registerAuthorize(app, { runtime, pending });
-  registerComplete(app, { runtime, pending, codes });
-  registerToken(app, { runtime, codes, keyMaterial });
-  registerLogout(app, { runtime });
+  registerAuthorize(app, { getTenant });
+  registerComplete(app, { getTenant });
+  registerToken(app, { getTenant });
+  registerLogout(app, { getTenant });
 
   if (options.configFilePath) {
-    registerProfilesRoutes(app, { runtime, configFilePath: options.configFilePath });
+    registerProfilesRoutes(app, { getTenant });
     registerEventsRoute(app, { emitter: eventsEmitter });
     app.get('/admin', async (_request, reply) => {
-      return reply.code(200).type('text/html; charset=utf-8').send(renderAdminPage(runtime.get()));
-    });
-  }
-
-  let watcher: ConfigWatcher | null = null;
-  if (options.configFilePath) {
-    watcher = await watchConfig(options.configFilePath, {
-      onReload: (config) => {
-        runtime.set(config);
-        logger.info({ issuer: config.issuer }, 'config reloaded');
-      },
-      onError: (err) => logger.warn({ err }, 'config reload failed; keeping previous config'),
+      return reply
+        .code(200)
+        .type('text/html; charset=utf-8')
+        .send(renderAdminPage({ config: runtime.get(), slug: '(legacy)' }));
     });
   }
 
   return {
     app,
-    runtime,
-    keyMaterial,
-    codes,
-    pending,
+    tenant,
     close: async () => {
       if (watcher) await watcher.close();
       await app.close();

@@ -6,12 +6,21 @@ import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
+
+function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantState {
+  return {
+    slug: '(legacy)',
+    configPath: '/dev/null',
+    status: 'active',
+    issuer: 'http://localhost:8095',
+    watcher: null,
+    ...overrides,
+  } as ActiveTenantState;
+}
 
 function baseConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -33,9 +42,11 @@ async function buildApp() {
   const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-admin-'));
   const file = path.join(dir, 'config.json');
   writeFileSync(file, JSON.stringify(baseConfig(), null, 2));
-  const runtime = createRuntimeConfig(baseConfig());
+  const config = baseConfig();
+  const runtime = createRuntimeConfig(config);
   const app = Fastify();
-  registerProfilesRoutes(app, { runtime, configFilePath: file });
+  const tenant = buildActiveTenant({ config, runtime, configPath: file });
+  registerProfilesRoutes(app, { getTenant: () => tenant });
   return { app, runtime, file };
 }
 
@@ -45,7 +56,7 @@ describe('admin profiles routes', () => {
     const res = await app.inject({ method: 'GET', url: '/admin/api/config' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Config;
-    expect(body.issuer).toBe('http://localhost:8095');
+    expect(body.signingKey.kid).toBe('k1');
     await app.close();
   });
 

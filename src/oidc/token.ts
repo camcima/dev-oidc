@@ -1,16 +1,13 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
-import type { RuntimeConfig } from '@/config/runtime.js';
-import type { CodeStore } from '@/oidc/codes.js';
-import type { KeyMaterial } from '@/oidc/keys.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Profile } from '@/config/schema.js';
 import { buildClaims } from '@/oidc/claims.js';
 
 export interface TokenDeps {
-  runtime: RuntimeConfig;
-  codes: CodeStore;
-  keyMaterial: KeyMaterial;
+  getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface TokenBody {
@@ -63,7 +60,9 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
-  app.post('/token', async (request, reply) => {
+  const prefix = deps.pathPrefix ?? '';
+  app.post(`${prefix}/token`, async (request, reply) => {
+    const tenant = deps.getTenant(request);
     const body = request.body as TokenBody;
     const creds = extractClientCredentials(request, body);
     if (creds.conflict) {
@@ -79,7 +78,7 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
       });
     }
 
-    const config = deps.runtime.get();
+    const config = tenant.runtime.get();
     const client = config.clients.find((c) => c.clientId === creds.clientId);
     if (!client) {
       return reply
@@ -103,9 +102,9 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
 
     switch (body.grant_type) {
       case 'authorization_code':
-        return handleCodeGrant(deps, body, reply);
+        return handleCodeGrant(tenant, body, reply);
       case 'refresh_token':
-        return handleRefreshGrant(deps, body, reply);
+        return handleRefreshGrant(tenant, body, reply);
       default:
         return reply.code(400).send({ error: 'unsupported_grant_type' });
     }
@@ -113,7 +112,7 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
 }
 
 async function handleCodeGrant(
-  deps: TokenDeps,
+  tenant: ActiveTenantState,
   body: TokenBody,
   reply: FastifyReply,
 ): Promise<unknown> {
@@ -123,7 +122,7 @@ async function handleCodeGrant(
       .send({ error: 'invalid_request', error_description: 'missing required fields' });
   }
 
-  const record = deps.codes.consume(body.code);
+  const record = tenant.codes.consume(body.code);
   if (!record) {
     return reply
       .code(400)
@@ -148,7 +147,7 @@ async function handleCodeGrant(
       .send({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
   }
 
-  const config = deps.runtime.get();
+  const config = tenant.runtime.get();
   const profile = config.profiles.find((p) => p.id === record.profileId);
   if (!profile) {
     return reply
@@ -156,11 +155,11 @@ async function handleCodeGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(deps, profile, record.clientId, record.nonce, record.scope, reply);
+  return issueTokenSet(tenant, profile, record.clientId, record.nonce, record.scope, reply);
 }
 
 async function handleRefreshGrant(
-  deps: TokenDeps,
+  tenant: ActiveTenantState,
   body: TokenBody,
   reply: FastifyReply,
 ): Promise<unknown> {
@@ -168,12 +167,12 @@ async function handleRefreshGrant(
     return reply.code(400).send({ error: 'invalid_request' });
   }
 
-  const record = deps.codes.consumeRefresh(body.refresh_token);
+  const record = tenant.codes.consumeRefresh(body.refresh_token);
   if (!record || record.clientId !== body.client_id) {
     return reply.code(400).send({ error: 'invalid_grant' });
   }
 
-  const config = deps.runtime.get();
+  const config = tenant.runtime.get();
   const profile = config.profiles.find((p) => p.id === record.profileId);
   if (!profile) {
     return reply
@@ -181,18 +180,18 @@ async function handleRefreshGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(deps, profile, record.clientId, '', record.scope, reply);
+  return issueTokenSet(tenant, profile, record.clientId, '', record.scope, reply);
 }
 
 async function issueTokenSet(
-  deps: TokenDeps,
+  tenant: ActiveTenantState,
   profile: Profile,
   clientId: string,
   nonce: string,
   scope: string,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const config = deps.runtime.get();
+  const config = tenant.runtime.get();
   const client = config.clients.find((c) => c.clientId === clientId);
   if (!client) {
     return reply.code(400).send({ error: 'invalid_client' });
@@ -200,24 +199,32 @@ async function issueTokenSet(
   const baseClaims = buildClaims({ profile, subjectClaim: config.subjectClaim });
 
   const accessToken = await new jose.SignJWT({ ...baseClaims, scope })
-    .setProtectedHeader({ alg: deps.keyMaterial.alg, kid: deps.keyMaterial.kid, typ: 'JWT' })
-    .setIssuer(config.issuer)
+    .setProtectedHeader({
+      alg: tenant.keyMaterial.alg,
+      kid: tenant.keyMaterial.kid,
+      typ: 'JWT',
+    })
+    .setIssuer(tenant.issuer)
     .setAudience(client.audience)
     .setSubject(profile.id)
     .setIssuedAt()
     .setExpirationTime(`${config.tokenTtlSeconds}s`)
-    .sign(deps.keyMaterial.privateKey);
+    .sign(tenant.keyMaterial.privateKey);
 
   const idToken = await new jose.SignJWT({ ...baseClaims, nonce: nonce || undefined })
-    .setProtectedHeader({ alg: deps.keyMaterial.alg, kid: deps.keyMaterial.kid, typ: 'JWT' })
-    .setIssuer(config.issuer)
+    .setProtectedHeader({
+      alg: tenant.keyMaterial.alg,
+      kid: tenant.keyMaterial.kid,
+      typ: 'JWT',
+    })
+    .setIssuer(tenant.issuer)
     .setAudience(clientId)
     .setSubject(profile.id)
     .setIssuedAt()
     .setExpirationTime(`${config.tokenTtlSeconds}s`)
-    .sign(deps.keyMaterial.privateKey);
+    .sign(tenant.keyMaterial.privateKey);
 
-  const refreshToken = deps.codes.issueRefresh({ clientId, profileId: profile.id, scope });
+  const refreshToken = tenant.codes.issueRefresh({ clientId, profileId: profile.id, scope });
 
   return reply.code(200).send({
     access_token: accessToken,

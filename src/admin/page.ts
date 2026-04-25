@@ -32,20 +32,110 @@ const STYLES = `
   dialog.edit-dialog form.edit { border: none; border-radius: 0; max-width: none; padding: 1rem 1.125rem; }
 `.trim();
 
-const CLIENT_SCRIPT = `
+// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+const SAFE_STYLES = new Html(STYLES); // module-level const string literal, never externally controlled
+
+function profileEditForm(profile: Profile, apiBase: string): Html {
+  const claimsJson = JSON.stringify(profile.claims, null, 2);
+  return html`<form
+    class="edit"
+    data-api="${apiBase}/${profile.id}"
+    data-method="PUT"
+    method="post"
+  >
+    <label for="id-${profile.id}">ID</label>
+    <input name="id" id="id-${profile.id}" value="${profile.id}" required readonly />
+    <label for="displayName-${profile.id}">Display name</label>
+    <input
+      name="displayName"
+      id="displayName-${profile.id}"
+      value="${profile.displayName}"
+      required
+    />
+    <label for="email-${profile.id}">Email</label>
+    <input name="email" id="email-${profile.id}" type="email" value="${profile.email}" required />
+    <label for="claims-${profile.id}">Claims (JSON)</label>
+    <textarea name="claims" id="claims-${profile.id}">${claimsJson}</textarea>
+    <div class="wide">
+      <button type="button" data-dialog-close>Cancel</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>`;
+}
+
+function profileAddForm(apiBase: string): Html {
+  return html`<form class="edit" data-api="${apiBase}" data-method="POST" method="post">
+    <label for="id-new">ID</label>
+    <input name="id" id="id-new" value="" required />
+    <label for="displayName-new">Display name</label>
+    <input name="displayName" id="displayName-new" value="" required />
+    <label for="email-new">Email</label>
+    <input name="email" id="email-new" type="email" value="" required />
+    <label for="claims-new">Claims (JSON)</label>
+    <textarea name="claims" id="claims-new">{}</textarea>
+    <div class="wide">
+      <button type="button" data-dialog-close>Cancel</button>
+      <button type="submit">Add</button>
+    </div>
+  </form>`;
+}
+
+function profileRow(profile: Profile, apiBase: string): Html {
+  const claimsCount = Object.keys(profile.claims).length;
+  return html`<tr>
+    <td>${profile.id}</td>
+    <td>${profile.displayName}</td>
+    <td>${profile.email}</td>
+    <td>${claimsCount} claim(s)</td>
+    <td>
+      <div class="actions">
+        <button type="button" data-edit-dialog="${profile.id}">Edit</button>
+        <form data-api="${apiBase}/${profile.id}" data-method="DELETE" method="post">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </div>
+      <dialog id="edit-dialog-${profile.id}" class="edit-dialog">
+        <div class="dialog-head">
+          <h3>Edit profile — ${profile.displayName}</h3>
+          <button type="button" data-dialog-close aria-label="Close">✕</button>
+        </div>
+        ${profileEditForm(profile, apiBase)}
+      </dialog>
+    </td>
+  </tr>`;
+}
+
+export interface RenderAdminPageInput {
+  config: Config;
+  slug: string;
+}
+
+export function renderAdminPage(input: RenderAdminPageInput): string {
+  const config = input.config;
+  const apiBase =
+    input.slug === '(legacy)' ? '/admin/api/profiles' : `/admin/api/${input.slug}/profiles`;
+
+  // Build client script per-render so we can embed the slug literal via
+  // JSON.stringify (which produces a safe JS string literal).
+  const clientScript = `
   (function() {
     const banner = document.getElementById('reload-banner');
+    const slug = ${JSON.stringify(input.slug)};
     const es = new EventSource('/admin/events');
-    es.addEventListener('config-changed', () => {
+    es.addEventListener('config-changed', function(ev) {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.slug !== slug && slug !== '(legacy)') return;
+      } catch (e) { /* fallback: show banner anyway */ }
       if (banner) banner.classList.add('visible');
     });
 
-    document.getElementById('reload-link').addEventListener('click', (e) => {
+    document.getElementById('reload-link').addEventListener('click', function(e) {
       e.preventDefault();
       window.location.reload();
     });
 
-    document.body.addEventListener('click', (ev) => {
+    document.body.addEventListener('click', function(ev) {
       const target = ev.target;
       if (!(target instanceof HTMLElement)) return;
 
@@ -72,7 +162,7 @@ const CLIENT_SCRIPT = `
       }
     });
 
-    document.body.addEventListener('submit', async (ev) => {
+    document.body.addEventListener('submit', async function(ev) {
       const form = ev.target;
       if (!(form instanceof HTMLFormElement)) return;
       if (!form.dataset.api) return;
@@ -102,89 +192,15 @@ const CLIENT_SCRIPT = `
       if (res.ok) {
         window.location.reload();
       } else {
-        const err = await res.json().catch(() => ({ error: 'unknown' }));
+        const err = await res.json().catch(function() { return { error: 'unknown' }; });
         alert(err.error_description || err.details || err.error || 'Request failed');
       }
     });
   })()
 `.trim();
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+  const safeClientScript = new Html(clientScript); // slug embedded via JSON.stringify — safe JS literal
 
-// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
-const SAFE_STYLES = new Html(STYLES); // module-level const string literal, never externally controlled
-// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
-const SAFE_CLIENT_SCRIPT = new Html(CLIENT_SCRIPT); // module-level const string literal, never externally controlled
-
-function profileEditForm(profile: Profile): Html {
-  const claimsJson = JSON.stringify(profile.claims, null, 2);
-  return html`<form
-    class="edit"
-    data-api="/admin/api/profiles/${profile.id}"
-    data-method="PUT"
-    method="post"
-  >
-    <label for="id-${profile.id}">ID</label>
-    <input name="id" id="id-${profile.id}" value="${profile.id}" required readonly />
-    <label for="displayName-${profile.id}">Display name</label>
-    <input
-      name="displayName"
-      id="displayName-${profile.id}"
-      value="${profile.displayName}"
-      required
-    />
-    <label for="email-${profile.id}">Email</label>
-    <input name="email" id="email-${profile.id}" type="email" value="${profile.email}" required />
-    <label for="claims-${profile.id}">Claims (JSON)</label>
-    <textarea name="claims" id="claims-${profile.id}">${claimsJson}</textarea>
-    <div class="wide">
-      <button type="button" data-dialog-close>Cancel</button>
-      <button type="submit">Save</button>
-    </div>
-  </form>`;
-}
-
-function profileAddForm(): Html {
-  return html`<form class="edit" data-api="/admin/api/profiles" data-method="POST" method="post">
-    <label for="id-new">ID</label>
-    <input name="id" id="id-new" value="" required />
-    <label for="displayName-new">Display name</label>
-    <input name="displayName" id="displayName-new" value="" required />
-    <label for="email-new">Email</label>
-    <input name="email" id="email-new" type="email" value="" required />
-    <label for="claims-new">Claims (JSON)</label>
-    <textarea name="claims" id="claims-new">{}</textarea>
-    <div class="wide">
-      <button type="button" data-dialog-close>Cancel</button>
-      <button type="submit">Add</button>
-    </div>
-  </form>`;
-}
-
-function profileRow(profile: Profile): Html {
-  const claimsCount = Object.keys(profile.claims).length;
-  return html`<tr>
-    <td>${profile.id}</td>
-    <td>${profile.displayName}</td>
-    <td>${profile.email}</td>
-    <td>${claimsCount} claim(s)</td>
-    <td>
-      <div class="actions">
-        <button type="button" data-edit-dialog="${profile.id}">Edit</button>
-        <form data-api="/admin/api/profiles/${profile.id}" data-method="DELETE" method="post">
-          <button type="submit" class="danger">Delete</button>
-        </form>
-      </div>
-      <dialog id="edit-dialog-${profile.id}" class="edit-dialog">
-        <div class="dialog-head">
-          <h3>Edit profile — ${profile.displayName}</h3>
-          <button type="button" data-dialog-close aria-label="Close">✕</button>
-        </div>
-        ${profileEditForm(profile)}
-      </dialog>
-    </td>
-  </tr>`;
-}
-
-export function renderAdminPage(config: Config): string {
   // The raw-config dump sits inside a <div> element body. Quotes are not
   // dangerous in element-text context, only in attribute values. Standard
   // escape would convert " to &quot;, which is correct but visually noisy
@@ -225,7 +241,7 @@ export function renderAdminPage(config: Config): string {
             </tr>
           </thead>
           <tbody>
-            ${config.profiles.map(profileRow)}
+            ${config.profiles.map((p) => profileRow(p, apiBase))}
           </tbody>
         </table>
 
@@ -234,14 +250,14 @@ export function renderAdminPage(config: Config): string {
             <h3>Add profile</h3>
             <button type="button" data-dialog-close aria-label="Close">✕</button>
           </div>
-          ${profileAddForm()}
+          ${profileAddForm(apiBase)}
         </dialog>
 
         <h2>Raw config</h2>
         <div class="json">${safeJsonHtml}</div>
 
         <script>
-          ${SAFE_CLIENT_SCRIPT};
+          ${safeClientScript};
         </script>
       </body>
     </html>`;

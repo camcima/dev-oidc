@@ -4,12 +4,21 @@ import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { createPendingAuthStore } from '@/oidc/pending.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
+
+function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantState {
+  return {
+    slug: '(legacy)',
+    configPath: '/dev/null',
+    status: 'active',
+    issuer: 'http://localhost:8095',
+    watcher: null,
+    ...overrides,
+  } as ActiveTenantState;
+}
 
 function buildConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -28,10 +37,12 @@ function buildConfig(): Config {
 }
 
 async function buildApp() {
-  const runtime = createRuntimeConfig(buildConfig());
+  const config = buildConfig();
+  const runtime = createRuntimeConfig(config);
   const pending = createPendingAuthStore({ ttlMs: 60_000 });
   const app = Fastify();
-  registerAuthorize(app, { runtime, pending });
+  const tenant = buildActiveTenant({ config, runtime, pending });
+  registerAuthorize(app, { getTenant: () => tenant });
   return { app, runtime, pending };
 }
 

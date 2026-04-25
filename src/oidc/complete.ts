@@ -1,12 +1,9 @@
-import type { FastifyInstance } from 'fastify';
-import type { RuntimeConfig } from '@/config/runtime.js';
-import type { PendingAuthStore } from '@/oidc/pending.js';
-import type { CodeStore } from '@/oidc/codes.js';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CompleteDeps {
-  runtime: RuntimeConfig;
-  pending: PendingAuthStore;
-  codes: CodeStore;
+  getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface CompleteBody {
@@ -15,9 +12,11 @@ interface CompleteBody {
 }
 
 export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void {
-  app.post('/authorize/complete', async (request, reply) => {
+  const prefix = deps.pathPrefix ?? '';
+  app.post(`${prefix}/authorize/complete`, async (request, reply) => {
+    const tenant = deps.getTenant(request);
     const body = request.body as CompleteBody;
-    const config = deps.runtime.get();
+    const config = tenant.runtime.get();
 
     if (!body.pendingAuthId || !body.profileId) {
       return reply
@@ -25,7 +24,7 @@ export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void
         .send({ error: 'invalid_request', error_description: 'missing fields' });
     }
 
-    const pending = deps.pending.consume(body.pendingAuthId);
+    const pending = tenant.pending.consume(body.pendingAuthId);
     if (!pending) {
       return reply
         .code(400)
@@ -50,7 +49,7 @@ export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void
         .send({ error: 'invalid_request', error_description: 'redirect_uri not allowed' });
     }
 
-    const code = deps.codes.issue({
+    const code = tenant.codes.issue({
       clientId: pending.clientId,
       profileId: profile.id,
       codeChallenge: pending.codeChallenge,

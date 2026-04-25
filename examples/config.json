@@ -1,6 +1,4 @@
 {
-  "issuer": "http://localhost:8095",
-  "host": "0.0.0.0",
   "signingKey": { "kid": "k1" },
   "clients": [
     {

@@ -29,10 +29,7 @@ const ProfileSchema = z.object({
   claims: z.record(z.string(), z.unknown()).default({}),
 });
 
-export const ConfigSchema = z.object({
-  issuer: z.string().url(),
-  port: z.number().int().positive().default(8095),
-  host: z.string().default('127.0.0.1'),
+const ConfigBodySchema = z.object({
   signingKey: SigningKeySchema,
   clients: z.array(ClientSchema).min(1),
   subjectClaim: z.string().default('sub'),
@@ -42,7 +39,51 @@ export const ConfigSchema = z.object({
   profiles: z.array(ProfileSchema).default([]),
 });
 
-export type Config = z.infer<typeof ConfigSchema>;
+const KNOWN_KEYS = new Set(Object.keys(ConfigBodySchema.shape));
+
+export const ConfigSchema = ConfigBodySchema.passthrough().superRefine((value, ctx) => {
+  const raw = value as Record<string, unknown>;
+
+  // Tailored error messages for fields that USED to live here in v0.1.x.
+  if ('issuer' in raw) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['issuer'],
+      message:
+        'issuer no longer belongs in project config; the Hub computes it from publicUrl + slug, or pass `--public-url` for legacy mode',
+    });
+  }
+  if ('port' in raw) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['port'],
+      message:
+        'port no longer belongs in project config; set hub.server.port in hub.json (or pass `--port` for legacy mode)',
+    });
+  }
+  if ('host' in raw) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['host'],
+      message:
+        'host no longer belongs in project config; set hub.server.host in hub.json (or pass `--host` for legacy mode)',
+    });
+  }
+
+  // Reject any other unrecognized keys (strict-like behaviour for all other unknown fields).
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_KEYS.has(key) && key !== 'issuer' && key !== 'port' && key !== 'host') {
+      ctx.addIssue({
+        code: 'unrecognized_keys',
+        keys: [key],
+        path: [],
+        message: `Unrecognized key: "${key}"`,
+      });
+    }
+  }
+}) as unknown as typeof ConfigBodySchema;
+
+export type Config = z.infer<typeof ConfigBodySchema>;
 export type Client = z.infer<typeof ClientSchema>;
 export type Profile = z.infer<typeof ProfileSchema>;
 export type SigningKey = z.infer<typeof SigningKeySchema>;

@@ -4,12 +4,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { watchConfig } from '@/config/watcher.js';
 
-function writeValidConfig(file: string, issuer: string): void {
+function writeValidConfig(file: string, kid: string): void {
   writeFileSync(
     file,
     JSON.stringify({
-      issuer,
-      signingKey: { kid: 'k1' },
+      signingKey: { kid },
       clients: [
         {
           clientId: 'my-app',
@@ -27,31 +26,31 @@ describe('watchConfig', () => {
 
   it('emits a reload event when the file changes (debounced)', async () => {
     const file = path.join(tmpDir, 'config.json');
-    writeValidConfig(file, 'http://localhost:8095');
+    writeValidConfig(file, 'k1');
 
     const events: string[] = [];
     const watcher = await watchConfig(file, {
-      onReload: (config) => events.push(config.issuer),
+      onReload: (config) => events.push(config.signingKey.kid),
       onError: () => {},
       debounceMs: 50,
     });
 
-    writeValidConfig(file, 'http://localhost:9090');
+    writeValidConfig(file, 'k2');
 
     await new Promise((resolve) => setTimeout(resolve, 250));
 
-    expect(events).toContain('http://localhost:9090');
+    expect(events).toContain('k2');
     await watcher.close();
   });
 
   it('emits an error when the reloaded file is invalid; keeps last-good in memory', async () => {
     const file = path.join(tmpDir, 'config-err.json');
-    writeValidConfig(file, 'http://localhost:8095');
+    writeValidConfig(file, 'k1');
 
     const errors: Error[] = [];
     const reloads: string[] = [];
     const watcher = await watchConfig(file, {
-      onReload: (config) => reloads.push(config.issuer),
+      onReload: (config) => reloads.push(config.signingKey.kid),
       onError: (err) => errors.push(err),
       debounceMs: 50,
     });

@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { RuntimeConfig } from '@/config/runtime.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { renderLogoutPage } from '@/oidc/logout-page.js';
 
 export interface LogoutDeps {
-  runtime: RuntimeConfig;
+  getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface LogoutQuery {
@@ -11,10 +12,12 @@ interface LogoutQuery {
 }
 
 export function registerLogout(app: FastifyInstance, deps: LogoutDeps): void {
+  const prefix = deps.pathPrefix ?? '';
   const handler = async (request: FastifyRequest, reply: FastifyReply): Promise<unknown> => {
+    const tenant = deps.getTenant(request);
     const query = request.query as LogoutQuery;
     const requested = query.post_logout_redirect_uri;
-    const config = deps.runtime.get();
+    const config = tenant.runtime.get();
 
     if (!requested) {
       return reply
@@ -37,6 +40,6 @@ export function registerLogout(app: FastifyInstance, deps: LogoutDeps): void {
     return reply.code(302).header('location', allowedUri).send();
   };
 
-  app.get('/logout', handler);
-  app.post('/logout', handler);
+  app.get(`${prefix}/logout`, handler);
+  app.post(`${prefix}/logout`, handler);
 }
