@@ -21,9 +21,6 @@ function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantS
 
 function buildConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {

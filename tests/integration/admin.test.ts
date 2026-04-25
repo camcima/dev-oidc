@@ -7,9 +7,6 @@ import { createDevOidcServer } from '@/server.js';
 
 function seed(file: string): void {
   const config: Config = {
-    issuer: 'http://localhost:8095',
-    port: 0,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -38,7 +35,7 @@ describe('admin integration', () => {
     const server = await createDevOidcServer({
       config,
       configFilePath: file,
-      issuer: config.issuer,
+      issuer: 'http://localhost:8095',
     });
     try {
       const res = await server.app.inject({ method: 'GET', url: '/admin' });
@@ -59,7 +56,7 @@ describe('admin integration', () => {
     const server = await createDevOidcServer({
       config,
       configFilePath: file,
-      issuer: config.issuer,
+      issuer: 'http://localhost:8095',
     });
     try {
       const res = await server.app.inject({

@@ -5,9 +5,6 @@ import type { Config } from '@/config/schema.js';
 
 function config(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [],
     subjectClaim: 'sub',
@@ -18,14 +15,14 @@ function config(): Config {
   };
 }
 
-function tenant(overrides?: Partial<Config>): ActiveTenantState {
-  const cfg = { ...config(), ...overrides };
+function tenant(issuer = 'http://localhost:8095'): ActiveTenantState {
+  const cfg = config();
   return {
     slug: '(legacy)',
     configPath: '',
     status: 'active',
     config: cfg,
-    issuer: cfg.issuer,
+    issuer,
     runtime: null as never,
     keyMaterial: null as never,
     jwks: null as never,
@@ -62,7 +59,7 @@ describe('renderIndexPage', () => {
 
   it('escapes the issuer when interpolated into HTML', () => {
     const html = renderIndexPage({
-      tenant: tenant({ issuer: 'http://<evil>' }),
+      tenant: tenant('http://<evil>'),
       adminEnabled: false,
     });
     expect(html).not.toContain('<evil>');

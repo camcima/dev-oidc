@@ -11,9 +11,6 @@ function pkcePair() {
 }
 
 const config: Config = {
-  issuer: 'http://localhost:8095',
-  port: 0,
-  host: '127.0.0.1',
   signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
   clients: [
     {
@@ -40,7 +37,7 @@ const config: Config = {
 
 describe('integration: full auth-code + PKCE flow', () => {
   it('mints a verifiable access token end-to-end', async () => {
-    const server = await createDevOidcServer({ config, issuer: config.issuer });
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
     try {
       const { verifier, challenge } = pkcePair();
 
@@ -108,7 +105,7 @@ describe('integration: full auth-code + PKCE flow', () => {
   });
 
   it('discovery document links to all endpoints', async () => {
-    const server = await createDevOidcServer({ config, issuer: config.issuer });
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
     try {
       const res = await server.app.inject({
         method: 'GET',

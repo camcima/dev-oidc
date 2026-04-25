@@ -21,9 +21,6 @@ function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantS
 
 function baseConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -59,7 +56,7 @@ describe('admin profiles routes', () => {
     const res = await app.inject({ method: 'GET', url: '/admin/api/config' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Config;
-    expect(body.issuer).toBe('http://localhost:8095');
+    expect(body.signingKey.kid).toBe('k1');
     await app.close();
   });
 

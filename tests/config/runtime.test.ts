@@ -4,9 +4,6 @@ import { createRuntimeConfig } from '@/config/runtime.js';
 
 function baseConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -27,7 +24,7 @@ function baseConfig(): Config {
 describe('createRuntimeConfig', () => {
   it('exposes the initial config via get()', () => {
     const r = createRuntimeConfig(baseConfig());
-    expect(r.get().issuer).toBe('http://localhost:8095');
+    expect(r.get().signingKey.kid).toBe('k1');
   });
 
   it('updates and notifies handlers when set() receives a different config', () => {
@@ -35,11 +32,11 @@ describe('createRuntimeConfig', () => {
     const handler = vi.fn();
     r.onChange(handler);
 
-    const next = { ...baseConfig(), issuer: 'http://localhost:9000' };
+    const next = { ...baseConfig(), signingKey: { ...baseConfig().signingKey, kid: 'k2' } };
     r.set(next);
 
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(r.get().issuer).toBe('http://localhost:9000');
+    expect(r.get().signingKey.kid).toBe('k2');
   });
 
   it('is a no-op when set() receives a content-equal config (same shape, key order differs)', () => {
@@ -57,9 +54,6 @@ describe('createRuntimeConfig', () => {
       subjectClaim: cfg.subjectClaim,
       clients: cfg.clients,
       signingKey: cfg.signingKey,
-      host: cfg.host,
-      port: cfg.port,
-      issuer: cfg.issuer,
     };
     r.set(reordered);
 
@@ -71,7 +65,7 @@ describe('createRuntimeConfig', () => {
     const handler = vi.fn();
     const unsubscribe = r.onChange(handler);
     unsubscribe();
-    r.set({ ...baseConfig(), issuer: 'http://localhost:9000' });
+    r.set({ ...baseConfig(), signingKey: { ...baseConfig().signingKey, kid: 'k9' } });
     expect(handler).not.toHaveBeenCalled();
   });
 });

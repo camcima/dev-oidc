@@ -7,9 +7,6 @@ import type { Config } from '@/config/schema.js';
 
 function baseConfig(): Config {
   return {
-    issuer: 'http://localhost:8095',
-    port: 8095,
-    host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
       {
@@ -38,8 +35,8 @@ describe('writeConfigFile', () => {
 
     const content = readFileSync(file, 'utf8');
     const parsed = JSON.parse(content);
-    expect(parsed.issuer).toBe('http://localhost:8095');
-    expect(content).toContain('\n  "issuer"');
+    expect(parsed.signingKey.kid).toBe('k1');
+    expect(content).toContain('\n  "signingKey"');
   });
 
   it('leaves the target file unchanged on error (atomic)', async () => {

@@ -8,7 +8,6 @@ describe('loadConfig', () => {
   const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-'));
 
   const valid = {
-    issuer: 'http://localhost:8095',
     signingKey: { kid: 'k1' },
     clients: [
       {
@@ -25,9 +24,6 @@ describe('loadConfig', () => {
     writeFileSync(file, JSON.stringify(valid));
 
     const config = await loadConfig(file);
-    expect(config.issuer).toBe('http://localhost:8095');
-    expect(config.port).toBe(8095);
-    expect(config.host).toBe('127.0.0.1');
     expect(config.subjectClaim).toBe('sub');
     expect(config.tokenTtlSeconds).toBe(900);
     expect(config.branding.title).toBe('Dev OIDC Login');
@@ -47,7 +43,7 @@ describe('loadConfig', () => {
 
   it('throws a validation error when the config fails the schema', async () => {
     const file = path.join(tmpDir, 'invalid.json');
-    writeFileSync(file, JSON.stringify({ issuer: 'not-a-url' }));
+    writeFileSync(file, JSON.stringify({ signingKey: { kid: '' } }));
     await expect(loadConfig(file)).rejects.toThrow();
   });
 });

@@ -3,7 +3,6 @@ import { ConfigSchema } from '@/config/schema.js';
 
 describe('ConfigSchema', () => {
   const minimalValid = {
-    issuer: 'http://localhost:8095',
     signingKey: { kid: 'k1' },
     clients: [
       {
@@ -12,24 +11,32 @@ describe('ConfigSchema', () => {
         audience: 'my-api',
       },
     ],
-    profiles: [
-      {
-        id: 'alice',
-        displayName: 'Alice',
-        email: 'alice@example.com',
-      },
-    ],
+    profiles: [{ id: 'alice', displayName: 'Alice', email: 'alice@example.com' }],
   };
 
-  it('accepts a minimal valid config', () => {
+  it('accepts a minimal config without issuer/port/host', () => {
     const result = ConfigSchema.safeParse(minimalValid);
     expect(result.success).toBe(true);
   });
 
-  it('rejects when issuer is missing', () => {
-    const { issuer, ...rest } = minimalValid;
-    void issuer;
-    const result = ConfigSchema.safeParse(rest);
+  it('rejects when issuer is provided (moved to hub config / legacy CLI)', () => {
+    const result = ConfigSchema.safeParse({
+      ...minimalValid,
+      issuer: 'http://localhost:8095',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.message).toMatch(/issuer no longer belongs in project config/);
+    }
+  });
+
+  it('rejects when port is provided', () => {
+    const result = ConfigSchema.safeParse({ ...minimalValid, port: 8095 });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects when host is provided', () => {
+    const result = ConfigSchema.safeParse({ ...minimalValid, host: '127.0.0.1' });
     expect(result.success).toBe(false);
   });
 
@@ -71,18 +78,6 @@ describe('ConfigSchema', () => {
     const result = ConfigSchema.safeParse(minimalValid);
     if (!result.success) throw result.error;
     expect(result.data.subjectClaim).toBe('sub');
-  });
-
-  it('defaults port to 8095', () => {
-    const result = ConfigSchema.safeParse(minimalValid);
-    if (!result.success) throw result.error;
-    expect(result.data.port).toBe(8095);
-  });
-
-  it('defaults host to 127.0.0.1', () => {
-    const result = ConfigSchema.safeParse(minimalValid);
-    if (!result.success) throw result.error;
-    expect(result.data.host).toBe('127.0.0.1');
   });
 
   it('rejects when signingKey.alg is not supported', () => {
