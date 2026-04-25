@@ -74,7 +74,8 @@ async function loadKeyFromFile(
   }
 
   const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.KeyLike;
-  return { kid, alg: configAlg, privateKey, publicJwk: parsed.publicJwk };
+  const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
+  return { kid, alg: configAlg, privateKey, publicJwk };
 }
 
 async function saveKeyToFile(filePath: string, material: KeyMaterial): Promise<void> {
