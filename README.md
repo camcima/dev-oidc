@@ -426,6 +426,26 @@ Bind-mount file watching is unreliable on Docker Desktop for macOS/WSL2. `docker
 
 ---
 
+## Coding-agent skill
+
+This repo ships a [Claude Code](https://claude.com/claude-code) skill that walks an agent through wiring dev-oidc into your app — detect the existing OIDC integration, generate a matching `dev-oidc.config.json`, pick a run mode, update env vars or compose files. Source: [`skills/dev-oidc-setup/`](./skills/dev-oidc-setup/).
+
+Install with the [`skills`](https://github.com/vercel-labs/skills) CLI from Vercel Labs:
+
+```bash
+# Claude Code
+npx skills add camcima/dev-oidc --skill dev-oidc-setup -a claude-code
+
+# Other supported agents (Cursor, Codex, Cline, etc. — see `npx skills agents`)
+npx skills add camcima/dev-oidc --skill dev-oidc-setup -a <agent>
+```
+
+Once installed, ask the agent to "set up dev-oidc in this project" (or any equivalent phrasing) and it picks up from there. The skill handles both first-time wire-ups (Hub mode, Docker compose, or legacy CLI) and edits to an existing `dev-oidc.config.json`.
+
+To uninstall: `npx skills remove dev-oidc-setup -a claude-code`.
+
+---
+
 ## Contributing
 
 Contributions welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, style, and commit conventions. Security issues: please read [SECURITY.md](./SECURITY.md) first.
