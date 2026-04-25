@@ -17,6 +17,7 @@ import { createCodeStore, type CodeStore } from '@/oidc/codes.js';
 import { createPendingAuthStore, type PendingAuthStore } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
+import { renderIndexPage } from '@/index/page.js';
 
 export interface CreateServerOptions {
   config: Config;
@@ -67,6 +68,14 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
 
   app.get('/.well-known/jwks.json', async () => {
     return buildJwks(keyMaterial);
+  });
+
+  app.get('/', async (_request, reply) => {
+    const adminEnabled = Boolean(options.configFilePath);
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .send(renderIndexPage({ config: runtime.get(), adminEnabled }));
   });
 
   registerAuthorize(app, { runtime, pending });
