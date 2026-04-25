@@ -3,6 +3,7 @@ import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CompleteDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface CompleteBody {
@@ -11,7 +12,8 @@ interface CompleteBody {
 }
 
 export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void {
-  app.post('/authorize/complete', async (request, reply) => {
+  const prefix = deps.pathPrefix ?? '';
+  app.post(`${prefix}/authorize/complete`, async (request, reply) => {
     const tenant = deps.getTenant(request);
     const body = request.body as CompleteBody;
     const config = tenant.runtime.get();

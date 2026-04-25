@@ -4,6 +4,7 @@ import { renderLoginPage } from '@/login/page.js';
 
 export interface AuthorizeDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface AuthorizeQuery {
@@ -18,7 +19,8 @@ interface AuthorizeQuery {
 }
 
 export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): void {
-  app.get('/authorize', async (request, reply) => {
+  const prefix = deps.pathPrefix ?? '';
+  app.get(`${prefix}/authorize`, async (request, reply) => {
     const tenant = deps.getTenant(request);
     const query = request.query as AuthorizeQuery;
     const config = tenant.runtime.get();
@@ -77,11 +79,14 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       scope: requestedScope,
     });
 
+    // Resolve the concrete action URL: if the prefix contains a :slug param,
+    // substitute the actual tenant slug so the form posts to the right path.
+    const concretePrefix = prefix.replace(':slug', tenant.slug);
     const html = renderLoginPage({
       pendingAuthId,
       profiles: config.profiles,
       branding: config.branding,
-      actionUrl: '/authorize/complete',
+      actionUrl: `${concretePrefix}/authorize/complete`,
     });
 
     return reply.code(200).type('text/html; charset=utf-8').send(html);

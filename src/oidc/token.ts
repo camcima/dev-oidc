@@ -7,6 +7,7 @@ import { buildClaims } from '@/oidc/claims.js';
 
 export interface TokenDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 interface TokenBody {
@@ -59,7 +60,8 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
-  app.post('/token', async (request, reply) => {
+  const prefix = deps.pathPrefix ?? '';
+  app.post(`${prefix}/token`, async (request, reply) => {
     const tenant = deps.getTenant(request);
     const body = request.body as TokenBody;
     const creds = extractClientCredentials(request, body);
