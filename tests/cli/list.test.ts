@@ -46,4 +46,13 @@ describe('list', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/no tenants|^\s*$/i);
   });
+
+  it('returns exitCode=2 when the hub config is malformed', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-list-bad-'));
+    const hub = path.join(dir, 'hub.json');
+    writeFileSync(hub, '{not valid json');
+    const result = await runList({ hubConfigPath: hub });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/failed to read hub config/i);
+  });
 });

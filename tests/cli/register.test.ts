@@ -91,6 +91,51 @@ describe('register', () => {
     expect(result.stderr).toMatch(/reserved/i);
   });
 
+  it('rejects when the explicit --slug fails SLUG_REGEX', async () => {
+    const hub = newHub();
+    const cfg = newProject();
+    const result = await runRegister({
+      hubConfigPath: hub,
+      configPathArg: cfg,
+      slug: 'BadSlug-with-uppercase',
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/does not match/i);
+  });
+
+  it('rejects when no --slug given and the directory yields an empty derivation', async () => {
+    // A directory whose basename has no alphanumeric characters reduces
+    // to an empty slug after the strip-and-trim pipeline. The CLI must
+    // surface that as a clear error rather than register an empty string.
+    const hub = newHub();
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-emptyslug-'));
+    const projectRoot = path.join(dir, '!!!');
+    mkdirSync(projectRoot);
+    const cfg = path.join(projectRoot, 'dev-oidc.config.json');
+    writeFileSync(
+      cfg,
+      JSON.stringify({
+        signingKey: { kid: 'k1' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [],
+      }),
+    );
+
+    const result = await runRegister({ hubConfigPath: hub, configPathArg: cfg });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/could not derive slug/i);
+  });
+
+  it('rejects a non-.json file path when it is not a directory', async () => {
+    const hub = newHub();
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-noext-'));
+    const file = path.join(dir, 'config.yaml');
+    writeFileSync(file, '');
+    const result = await runRegister({ hubConfigPath: hub, configPathArg: file, slug: 'app' });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/must end in .json/i);
+  });
+
   it('returns exitCode=2 when the hub config file is malformed', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-bad-'));
     const hub = path.join(dir, 'hub.json');

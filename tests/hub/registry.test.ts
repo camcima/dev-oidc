@@ -222,4 +222,75 @@ describe('TenantRegistry events', () => {
     await reg.remove('app');
     expect(events).toContain('removed:app');
   });
+
+  it('emits profilesChanged when the project config is rewritten on disk', async () => {
+    // Drives the per-tenant ConfigWatcher path: the registry installs a
+    // chokidar watcher on the project config when it activates, and a
+    // successful reload fires `profilesChanged`. This proves the active
+    // tenant's runtime view stays current without forcing a reconcile.
+    const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-reload-'));
+    const cfgPath = path.join(dir, 'dev-oidc.config.json');
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({
+        signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [{ id: 'alice', displayName: 'Alice', email: 'a@example.com' }],
+      }),
+    );
+
+    const events: string[] = [];
+    reg.events.on('profilesChanged', ({ slug }) => events.push(`profilesChanged:${slug}`));
+    await reg.add({ slug: 'app', configPath: cfgPath, enabled: true });
+
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({
+        signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [
+          { id: 'alice', displayName: 'Alice', email: 'a@example.com' },
+          { id: 'bob', displayName: 'Bob', email: 'b@example.com' },
+        ],
+      }),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(events.some((e) => e === 'profilesChanged:app')).toBe(true);
+
+    const tenant = reg.get('app');
+    if (tenant?.status !== 'active') throw new Error('expected active');
+    expect(tenant.runtime.get().profiles).toHaveLength(2);
+    await reg.closeAll();
+  });
+
+  it('keeps last-good runtime when the project config goes invalid mid-flight', async () => {
+    // The watcher onError path: a bad write produces a warn log but the
+    // tenant remains active with its previous runtime. We assert the
+    // tenant did not flip to error and still serves the last-known-good
+    // profiles list.
+    const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-err-'));
+    const cfgPath = path.join(dir, 'dev-oidc.config.json');
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({
+        signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [{ id: 'alice', displayName: 'Alice', email: 'a@example.com' }],
+      }),
+    );
+    await reg.add({ slug: 'app', configPath: cfgPath, enabled: true });
+
+    writeFileSync(cfgPath, 'not json');
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    const tenant = reg.get('app');
+    expect(tenant?.status).toBe('active');
+    if (tenant?.status === 'active') {
+      expect(tenant.runtime.get().profiles).toHaveLength(1);
+    }
+    await reg.closeAll();
+  });
 });

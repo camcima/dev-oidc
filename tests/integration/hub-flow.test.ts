@@ -187,6 +187,93 @@ describe('integration: hub mode auth-code flow', () => {
     }
   });
 
+  it('GET /admin/<slug> returns 503 HTML for an error-state tenant', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const badCfg = path.join(dir, 'bad.json');
+    writeFileSync(badCfg, 'not json');
+    const hubCfg = tmpHubConfig([{ slug: 'broken', configPath: badCfg }]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/admin/broken' });
+      expect(res.statusCode).toBe(503);
+      expect(res.headers['content-type']).toContain('text/html');
+      expect(res.payload).toContain('Tenant "broken" error');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('GET /admin/<slug> returns 404 for an unknown slug', async () => {
+    const hubCfg = tmpHubConfig([]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/admin/no-such' });
+      expect(res.statusCode).toBe(404);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('GET /admin/<slug> renders the profile CRUD page for an active tenant', async () => {
+    const cfg = tmpProjectConfig();
+    const hubCfg = tmpHubConfig([{ slug: 'app', configPath: cfg }]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/admin/app' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/html');
+      // The page is the existing profile CRUD UI parameterised by slug —
+      // its title carries the slug so the user knows which tenant they're editing.
+      expect(res.payload).toMatch(/app/);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('GET /admin/api/tenants serializes both active and error tenants', async () => {
+    // Drives the dashboard JSON endpoint (and the dashboard HTML render
+    // path) covering both branches of the tenant.map: active tenants
+    // expose issuer + profileCount; error tenants expose lastError. The
+    // dashboard polls this endpoint, so its shape is part of the wire
+    // contract.
+    const goodCfg = tmpProjectConfig();
+    const badDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-mixed-bad-'));
+    const badCfg = path.join(badDir, 'bad.json');
+    writeFileSync(badCfg, 'not json');
+    const hubCfg = tmpHubConfig([
+      { slug: 'good', configPath: goodCfg },
+      { slug: 'broken', configPath: badCfg },
+    ]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/admin/api/tenants' });
+      expect(res.statusCode).toBe(200);
+      const tenants = res.json() as Array<{
+        slug: string;
+        status: 'active' | 'error';
+        issuer: string | null;
+        profileCount: number | null;
+        lastError: string | null;
+      }>;
+      const good = tenants.find((t) => t.slug === 'good')!;
+      expect(good.status).toBe('active');
+      expect(good.issuer).toBe('http://localhost:8095/good');
+      expect(good.profileCount).toBe(1);
+      const broken = tenants.find((t) => t.slug === 'broken')!;
+      expect(broken.status).toBe('error');
+      expect(broken.issuer).toBeNull();
+      expect(broken.lastError).toBeTruthy();
+
+      // And the dashboard HTML renders both rows without throwing.
+      const html = await server.app.inject({ method: 'GET', url: '/admin' });
+      expect(html.statusCode).toBe(200);
+      expect(html.payload).toContain('good');
+      expect(html.payload).toContain('broken');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('rejects reserved slugs at the OIDC pre-handler (defense-in-depth)', async () => {
     // Even if a tenant named "api" or "_internal" somehow ended up in the
     // tenants map (HubConfigSchema rejects it on parse, but be safe), the
