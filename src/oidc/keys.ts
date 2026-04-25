@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as jose from 'jose';
@@ -12,12 +13,21 @@ export interface KeyMaterial {
   publicJwk: jose.JWK;
 }
 
-export async function createKeyMaterial(config: SigningKey): Promise<KeyMaterial> {
+export interface CreateKeyMaterialOptions {
+  configDir?: string;
+}
+
+export async function createKeyMaterial(
+  config: SigningKey,
+  options: CreateKeyMaterialOptions = {},
+): Promise<KeyMaterial> {
   if (config.source === 'generate') {
     return generateEphemeralKey(config.kid, config.alg);
   }
 
-  const filePath = config.source.slice('file:'.length);
+  const rawPath = config.source.slice('file:'.length);
+  const configDir = options.configDir ?? process.cwd();
+  const filePath = path.isAbsolute(rawPath) ? rawPath : path.resolve(configDir, rawPath);
   const existing = await loadKeyFromFile(filePath, config.kid, config.alg);
   if (existing) return existing;
   const generated = await generateEphemeralKey(config.kid, config.alg);

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -127,5 +127,42 @@ describe('createKeyMaterial (ES256)', () => {
     await expect(
       createKeyMaterial({ kid: 'k', alg: 'ES256', source: `file:${file}` }),
     ).rejects.toThrow(/has alg "RS256", but config expects "ES256"/);
+  });
+});
+
+describe('createKeyMaterial (configDir resolution)', () => {
+  it('resolves a relative file: path against configDir', async () => {
+    const configDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cfgdir-'));
+    mkdirSync(path.join(configDir, 'keys'));
+    const km = await createKeyMaterial(
+      { kid: 'rel', alg: 'RS256', source: 'file:keys/k1.json' },
+      { configDir },
+    );
+
+    const absoluteExpected = path.join(configDir, 'keys', 'k1.json');
+    expect(existsSync(absoluteExpected)).toBe(true);
+    expect(km.kid).toBe('rel');
+  });
+
+  it('uses an absolute file: path verbatim regardless of configDir', async () => {
+    const configDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cfgdir-'));
+    const keyDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-keys-'));
+    const absoluteKey = path.join(keyDir, 'abs.json');
+
+    await createKeyMaterial(
+      { kid: 'abs', alg: 'RS256', source: `file:${absoluteKey}` },
+      { configDir },
+    );
+
+    expect(existsSync(absoluteKey)).toBe(true);
+  });
+
+  it('falls back to CWD-relative when configDir is omitted', async () => {
+    // Backwards-compat: tests that don't pass configDir should still work
+    // because the implementation defaults configDir to process.cwd().
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cwd-'));
+    const file = path.join(tmpDir, 'cwd-fallback.json');
+    await createKeyMaterial({ kid: 'cwd', alg: 'RS256', source: `file:${file}` });
+    expect(existsSync(file)).toBe(true);
   });
 });

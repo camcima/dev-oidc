@@ -42,9 +42,8 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
 
   const configDir = options.configFilePath
     ? path.dirname(path.resolve(options.configFilePath))
-    : process.cwd(); // Phase 2 will pass configDir into createKeyMaterial
-  void configDir;
-  const keyMaterial = await createKeyMaterial(options.config.signingKey);
+    : process.cwd();
+  const keyMaterial = await createKeyMaterial(options.config.signingKey, { configDir });
   const jwksDocument = buildJwks(keyMaterial);
 
   const codes = createCodeStore({
