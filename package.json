@@ -73,6 +73,8 @@
     "release": "release-it",
     "release:alpha": "release-it prerelease --preRelease=alpha",
     "release:dry": "release-it --dry-run",
+    "release:docker": "gh workflow run release-docker.yml -f tag=v$(node -p \"require('./package.json').version\")",
+    "release:all": "npm run release && npm run release:docker",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

@@ -370,21 +370,40 @@ Contributions welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, style
 
 ## Releasing
 
-Releases are cut locally with release-it, not from GitHub Actions.
+dev-oidc ships to two registries: **npm** (the `dev-oidc` package) and **GHCR** (`ghcr.io/camcima/dev-oidc`). Each registry has its own publish path, so you can release to either or both.
+
+### npm only (release-it, local)
 
 ```bash
 npm run release
 ```
 
-For the current alpha line:
+`release-it` runs typecheck, lint, formatting checks, and tests; bumps `package.json` and `package-lock.json`; builds `dist`; verifies the npm package with `npm pack --dry-run`; then commits, tags `v${version}`, pushes, and publishes to npm.
+
+For the current alpha line use `npm run release:alpha`. Use `npm run release:dry` to preview without writing changes.
+
+### Docker only (GitHub Actions, GHCR)
 
 ```bash
-npm run release:alpha
+npm run release:docker
 ```
 
-release-it runs typecheck, lint, formatting checks, and tests before selecting a version. After it bumps `package.json` and `package-lock.json`, it builds `dist`, verifies the npm package with `npm pack --dry-run`, commits, tags, pushes, and publishes to npm.
+This triggers the `release-docker.yml` workflow on GitHub Actions for the version currently in `package.json`. The workflow checks out the `v${version}` tag (which must already exist on origin), builds a multi-arch image (`linux/amd64`, `linux/arm64`), and pushes to `ghcr.io/camcima/dev-oidc:${version}` and `:latest`.
 
-Use `npm run release:dry` to preview the release flow without writing changes or publishing.
+To backfill or re-publish a specific tag, dispatch the workflow directly:
+
+```bash
+gh workflow run release-docker.yml -f tag=v0.1.0           # also tags :latest
+gh workflow run release-docker.yml -f tag=v0.1.0 -f latest=false
+```
+
+### npm + Docker
+
+```bash
+npm run release:all
+```
+
+Runs `npm run release` first (npm publish + tag push), then `npm run release:docker` (GitHub Actions multi-arch build + GHCR push) using the freshly-bumped version.
 
 ## Changelog
 
