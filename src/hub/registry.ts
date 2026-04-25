@@ -10,13 +10,27 @@ import { buildJwks } from '@/oidc/jwks.js';
 import type { HubTenantEntry } from '@/hub/schema.js';
 import type { ActiveTenantState, ErrorTenantState, TenantState } from '@/hub/tenant-state.js';
 import { computeIssuer } from '@/hub/issuer.js';
+import { createLogger, type DevOidcLogger } from '@/logger.js';
+
+export type TenantRegistryEventMap = {
+  added: { slug: string };
+  removed: { slug: string };
+  statusChanged: { slug: string; status: 'active' | 'error' };
+  profilesChanged: { slug: string };
+};
+
+export type TenantRegistryEventName = keyof TenantRegistryEventMap;
 
 export interface TenantRegistryEvents {
-  on(event: 'added', listener: (payload: { slug: string }) => void): this;
-  on(event: 'removed', listener: (payload: { slug: string }) => void): this;
-  on(event: 'statusChanged', listener: (payload: { slug: string; status: string }) => void): this;
-  on(event: 'profilesChanged', listener: (payload: { slug: string }) => void): this;
-  emit(event: string, payload: { slug: string; status?: string }): boolean;
+  on<E extends TenantRegistryEventName>(
+    event: E,
+    listener: (payload: TenantRegistryEventMap[E]) => void,
+  ): this;
+  off<E extends TenantRegistryEventName>(
+    event: E,
+    listener: (payload: TenantRegistryEventMap[E]) => void,
+  ): this;
+  emit<E extends TenantRegistryEventName>(event: E, payload: TenantRegistryEventMap[E]): boolean;
 }
 
 export interface TenantRegistry {
@@ -31,11 +45,32 @@ export interface TenantRegistry {
 
 export interface CreateTenantRegistryOptions {
   publicUrl: string;
+  logger?: DevOidcLogger;
 }
 
 export function createTenantRegistry(options: CreateTenantRegistryOptions): TenantRegistry {
   const tenants = new Map<string, TenantState>();
-  const events = new EventEmitter() as unknown as TenantRegistryEvents;
+  // Construction note: Node's EventEmitter is structurally compatible with
+  // the typed `TenantRegistryEvents` interface — same on/off/emit shape,
+  // just looser parameter types. We narrow at the boundary so callers see
+  // a fully typed surface.
+  const events: TenantRegistryEvents = new EventEmitter();
+  const logger = options.logger ?? createLogger();
+
+  // Per-slug mutex: serializes add/remove for the same slug so concurrent
+  // reconcile invocations or competing CLI mutations cannot interleave the
+  // load → activate → swap → deactivate sequence.
+  const slugLocks = new Map<string, Promise<unknown>>();
+
+  function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
+    const prev = slugLocks.get(slug) ?? Promise.resolve();
+    const result = prev.then(fn, fn);
+    slugLocks.set(
+      slug,
+      result.catch(() => undefined),
+    );
+    return result;
+  }
 
   async function activate(entry: HubTenantEntry): Promise<TenantState> {
     const configDir = path.dirname(entry.configPath);
@@ -82,12 +117,18 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
           runtime.set(newConfig);
           events.emit('profilesChanged', { slug: entry.slug });
         },
-        onError: () => {
-          // Keep last good config; logged elsewhere.
+        onError: (err) => {
+          logger.warn(
+            { slug: entry.slug, configPath: entry.configPath, err },
+            'tenant config reload failed; keeping last known good',
+          );
         },
       });
-    } catch {
-      // Watcher failure is not fatal; log handled at server level.
+    } catch (err) {
+      logger.warn(
+        { slug: entry.slug, configPath: entry.configPath, err },
+        'failed to start tenant config watcher; tenant active but will not hot-reload',
+      );
     }
 
     runtime.onChange(() => events.emit('profilesChanged', { slug: entry.slug }));
@@ -120,19 +161,33 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
     events,
     async add(entry) {
       if (!entry.enabled) return;
-      const existing = tenants.get(entry.slug);
-      if (existing) await deactivate(existing);
-      const state = await activate(entry);
-      tenants.set(entry.slug, state);
-      events.emit('added', { slug: entry.slug });
-      events.emit('statusChanged', { slug: entry.slug, status: state.status });
+      return withSlugLock(entry.slug, async () => {
+        // Activate-then-swap: build the new state fully before touching the
+        // map, then swap atomically (a single synchronous .set), then close
+        // out the previous state. Requests in flight against the old state
+        // continue against their captured reference — its watcher and
+        // stores remain valid until deactivate() runs. New requests
+        // resolve to the new state from the swap onward.
+        const state = await activate(entry);
+        const previous = tenants.get(entry.slug);
+        tenants.set(entry.slug, state);
+        if (previous) {
+          await deactivate(previous);
+        }
+        events.emit('added', { slug: entry.slug });
+        events.emit('statusChanged', { slug: entry.slug, status: state.status });
+      });
     },
     async remove(slug) {
-      const existing = tenants.get(slug);
-      if (!existing) return;
-      await deactivate(existing);
-      tenants.delete(slug);
-      events.emit('removed', { slug });
+      return withSlugLock(slug, async () => {
+        const existing = tenants.get(slug);
+        if (!existing) return;
+        // Remove from the map before awaiting deactivate so new requests
+        // don't resolve to a tenant whose watcher is mid-close.
+        tenants.delete(slug);
+        await deactivate(existing);
+        events.emit('removed', { slug });
+      });
     },
     async reconcile(entries) {
       const incomingEnabled = entries.filter((e) => e.enabled);

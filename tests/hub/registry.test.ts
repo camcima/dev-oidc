@@ -127,6 +127,56 @@ describe('TenantRegistry.reconcile', () => {
   });
 });
 
+describe('TenantRegistry isolation under concurrent add/remove', () => {
+  it('serializes concurrent add() calls for the same slug', async () => {
+    const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
+    const first = tmpProjectConfig({ kid: 'first' });
+    const second = tmpProjectConfig({ kid: 'second' });
+
+    // Fire both adds without awaiting between — only the per-slug mutex
+    // prevents a partial state where neither lands.
+    await Promise.all([
+      reg.add({ slug: 'app', configPath: first, enabled: true }),
+      reg.add({ slug: 'app', configPath: second, enabled: true }),
+    ]);
+
+    const tenant = reg.get('app');
+    if (tenant?.status !== 'active') throw new Error('expected active');
+    // The second add wins (last-writer-wins serialized through the mutex).
+    expect(tenant.keyMaterial.kid).toBe('second');
+    // No tenants should be left in a half-activated state.
+    expect(reg.list()).toHaveLength(1);
+  });
+
+  it('a request resolved to the previous tenant continues to use that state after a swap', async () => {
+    // The new add() must produce a fully-activated state and only then swap
+    // it into the map; the old reference handed out before the swap remains
+    // valid (its watcher closes asynchronously, but the captured stores and
+    // key material continue to function for the duration of the in-flight
+    // request). This test asserts the captured reference does not get
+    // mutated in place during the swap.
+    const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
+    const first = tmpProjectConfig({ kid: 'first' });
+    const second = tmpProjectConfig({ kid: 'second' });
+
+    await reg.add({ slug: 'app', configPath: first, enabled: true });
+    const captured = reg.get('app');
+    if (captured?.status !== 'active') throw new Error('expected active');
+    const capturedKid = captured.keyMaterial.kid;
+
+    await reg.add({ slug: 'app', configPath: second, enabled: true });
+
+    // The captured reference's keyMaterial is still the original — the new
+    // state is a different object that the map now points to.
+    expect(captured.keyMaterial.kid).toBe(capturedKid);
+    expect(capturedKid).toBe('first');
+    const fresh = reg.get('app');
+    if (fresh?.status !== 'active') throw new Error('expected active');
+    expect(fresh.keyMaterial.kid).toBe('second');
+    expect(fresh).not.toBe(captured);
+  });
+});
+
 describe('TenantRegistry events', () => {
   it('emits added on activation', async () => {
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });

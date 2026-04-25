@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { deriveSlugFromPath } from '@/cli/slug.js';
 import { loadConfig } from '@/config/loader.js';
-import { loadHubConfig, saveHubConfig } from '@/hub/loader.js';
+import { loadHubConfig, mutateHubConfig } from '@/hub/loader.js';
 import { computeIssuer, deriveDefaultPublicUrl } from '@/hub/issuer.js';
 import { isReservedSlug, SLUG_REGEX } from '@/hub/schema.js';
 
@@ -50,20 +50,29 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
     return { exitCode: 1, stderr: `dev-oidc: slug "${slug}" is reserved\n` };
   }
 
-  const hub = await loadHubConfig(options.hubConfigPath);
-  const existing = hub.tenants.find((t) => t.slug === slug);
-  if (existing) {
-    return {
-      exitCode: 1,
-      stderr: `dev-oidc: slug "${slug}" already registered to ${existing.configPath}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
-    };
+  let conflictPath: string | null = null;
+  try {
+    await mutateHubConfig(options.hubConfigPath, (hub) => {
+      const existing = hub.tenants.find((t) => t.slug === slug);
+      if (existing) {
+        conflictPath = existing.configPath;
+        // Throw a sentinel to abort the mutation; we surface the message below.
+        throw new Error('__slug_conflict__');
+      }
+      return {
+        ...hub,
+        tenants: [...hub.tenants, { slug, configPath: absConfig, enabled: true }],
+      };
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === '__slug_conflict__' && conflictPath) {
+      return {
+        exitCode: 1,
+        stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath as string}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
+      };
+    }
+    throw err;
   }
-
-  const next = {
-    ...hub,
-    tenants: [...hub.tenants, { slug, configPath: absConfig, enabled: true }],
-  };
-  await saveHubConfig(options.hubConfigPath, next);
   return { exitCode: 0, stdout: `Registered "${slug}" → ${absConfig}\n` };
 }
 
@@ -73,14 +82,32 @@ export interface UnregisterOptions {
 }
 
 export async function runUnregister(options: UnregisterOptions): Promise<CommandResult> {
-  const hub = await loadHubConfig(options.hubConfigPath);
-  const existing = hub.tenants.find((t) => t.slug === options.slug);
-  if (!existing) {
-    return { exitCode: 1, stderr: `dev-oidc: unknown slug "${options.slug}"\n` };
+  if (!SLUG_REGEX.test(options.slug)) {
+    return {
+      exitCode: 1,
+      stderr: `dev-oidc: invalid slug shape; expected ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$\n`,
+    };
   }
-  const next = { ...hub, tenants: hub.tenants.filter((t) => t.slug !== options.slug) };
-  await saveHubConfig(options.hubConfigPath, next);
-  return { exitCode: 0, stdout: `Unregistered "${options.slug}" → ${existing.configPath}\n` };
+  let removedConfigPath: string | null = null;
+  try {
+    await mutateHubConfig(options.hubConfigPath, (hub) => {
+      const existing = hub.tenants.find((t) => t.slug === options.slug);
+      if (!existing) {
+        throw new Error('__unknown_slug__');
+      }
+      removedConfigPath = existing.configPath;
+      return { ...hub, tenants: hub.tenants.filter((t) => t.slug !== options.slug) };
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === '__unknown_slug__') {
+      return { exitCode: 1, stderr: `dev-oidc: unknown slug "${options.slug}"\n` };
+    }
+    throw err;
+  }
+  return {
+    exitCode: 0,
+    stdout: `Unregistered "${options.slug}" → ${removedConfigPath as unknown as string}\n`,
+  };
 }
 
 export interface ListOptions {

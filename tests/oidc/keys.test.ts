@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -86,6 +86,33 @@ describe('createKeyMaterial (file-backed)', () => {
     await expect(
       createKeyMaterial({ kid: 'different-kid', alg: 'RS256', source: `file:${file}` }),
     ).rejects.toThrow(/has kid "original-kid", but config expects "different-kid"/);
+  });
+
+  it('throws a clear error when the persisted file is invalid JSON', async () => {
+    const file = path.join(tmpDir, 'corrupt.json');
+    writeFileSync(file, '{not json');
+    await expect(
+      createKeyMaterial({ kid: 'k1', alg: 'RS256', source: `file:${file}` }),
+    ).rejects.toThrow(/not valid JSON/);
+  });
+
+  it('throws a clear error when the persisted file is missing required fields', async () => {
+    const file = path.join(tmpDir, 'malformed.json');
+    writeFileSync(file, JSON.stringify({ kid: 'k1' })); // no privateJwk/publicJwk
+    await expect(
+      createKeyMaterial({ kid: 'k1', alg: 'RS256', source: `file:${file}` }),
+    ).rejects.toThrow(/malformed/);
+  });
+
+  it('throws a clear error when the persisted JWK is missing kty', async () => {
+    const file = path.join(tmpDir, 'no-kty.json');
+    writeFileSync(
+      file,
+      JSON.stringify({ kid: 'k1', privateJwk: { foo: 'bar' }, publicJwk: { foo: 'bar' } }),
+    );
+    await expect(
+      createKeyMaterial({ kid: 'k1', alg: 'RS256', source: `file:${file}` }),
+    ).rejects.toThrow(/malformed/);
   });
 });
 

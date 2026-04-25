@@ -2,6 +2,7 @@ import path from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import * as jose from 'jose';
+import { z } from 'zod';
 import type { SigningKey } from '@/config/schema.js';
 
 export type SigningAlg = 'RS256' | 'ES256';
@@ -46,6 +47,16 @@ async function generateEphemeralKey(kid: string, alg: SigningAlg): Promise<KeyMa
   return { kid, alg, privateKey, publicJwk: jwk };
 }
 
+// Minimum-viable JWK shape: a `kty` discriminator plus arbitrary other
+// fields (jose validates the algorithm-specific bits during importJWK).
+const JwkSchema = z.object({ kty: z.string().min(1) }).passthrough();
+
+const PersistedKeySchema = z.object({
+  kid: z.string().min(1),
+  privateJwk: JwkSchema,
+  publicJwk: JwkSchema,
+});
+
 interface PersistedKey {
   kid: string;
   privateJwk: jose.JWK;
@@ -66,7 +77,20 @@ async function loadKeyFromFile(
     throw error;
   }
 
-  const parsed = JSON.parse(raw) as PersistedKey;
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`dev-oidc: signing key at ${filePath} is not valid JSON: ${message}`);
+  }
+  const result = PersistedKeySchema.safeParse(json);
+  if (!result.success) {
+    throw new Error(
+      `dev-oidc: signing key at ${filePath} is malformed (expected { kid, privateJwk, publicJwk }): ${result.error.message}`,
+    );
+  }
+  const parsed = result.data as PersistedKey;
   if (parsed.kid !== kid) {
     throw new Error(
       `dev-oidc: signing key at ${filePath} has kid "${parsed.kid}", but config expects "${kid}". ` +

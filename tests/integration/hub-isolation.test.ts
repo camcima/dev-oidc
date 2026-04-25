@@ -125,6 +125,92 @@ describe('integration: cross-tenant isolation', () => {
     }
   });
 
+  it("rejects a tenant A refresh_token presented to tenant B's /token", async () => {
+    const cfgA = projectConfig({ kid: 'kA' });
+    const cfgB = projectConfig({ kid: 'kB' });
+    const hub = hubConfig([
+      { slug: 'a', configPath: cfgA },
+      { slug: 'b', configPath: cfgB },
+    ]);
+    const server = await createHubServer({ hubConfigPath: hub });
+    try {
+      const { v, c } = pkce();
+      const codeA = await getCode(server, 'a', c);
+      const tokenA = await server.app.inject({
+        method: 'POST',
+        url: '/a/token',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: codeA,
+          code_verifier: v,
+          client_id: 'my-app',
+          redirect_uri: 'http://localhost:5173/cb',
+        }).toString(),
+      });
+      expect(tokenA.statusCode).toBe(200);
+      const { refresh_token } = tokenA.json() as { refresh_token: string };
+      expect(refresh_token).toBeTypeOf('string');
+
+      const refreshAtB = await server.app.inject({
+        method: 'POST',
+        url: '/b/token',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token,
+          client_id: 'my-app',
+        }).toString(),
+      });
+      expect(refreshAtB.statusCode).toBe(400);
+      const body = refreshAtB.json() as { error: string };
+      expect(body.error).toBe('invalid_grant');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a tenant A pendingAuthId presented to tenant B's /authorize/complete", async () => {
+    const cfgA = projectConfig({ kid: 'kA' });
+    const cfgB = projectConfig({ kid: 'kB' });
+    const hub = hubConfig([
+      { slug: 'a', configPath: cfgA },
+      { slug: 'b', configPath: cfgB },
+    ]);
+    const server = await createHubServer({ hubConfigPath: hub });
+    try {
+      const { c } = pkce();
+      const auth = await server.app.inject({
+        method: 'GET',
+        url:
+          `/a/authorize?` +
+          new URLSearchParams({
+            client_id: 'my-app',
+            redirect_uri: 'http://localhost:5173/cb',
+            response_type: 'code',
+            scope: 'openid',
+            state: 's',
+            code_challenge: c,
+            code_challenge_method: 'S256',
+          }).toString(),
+      });
+      const pendingId = auth.payload.match(/name="pendingAuthId"[^>]*value="([^"]+)"/)![1];
+
+      const completeAtB = await server.app.inject({
+        method: 'POST',
+        url: '/b/authorize/complete',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: `pendingAuthId=${pendingId}&profileId=u`,
+      });
+      // Tenant B's pending store does not know this id; the handler MUST
+      // not honor it. Allowed responses are 4xx (not_found / invalid_request).
+      expect(completeAtB.statusCode).toBeGreaterThanOrEqual(400);
+      expect(completeAtB.statusCode).toBeLessThan(500);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("token issued by A does not verify against B's JWKS", async () => {
     const cfgA = projectConfig({ kid: 'kA' });
     const cfgB = projectConfig({ kid: 'kB' });

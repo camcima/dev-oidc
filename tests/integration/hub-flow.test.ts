@@ -155,4 +155,24 @@ describe('integration: hub mode auth-code flow', () => {
       await server.close();
     }
   });
+
+  it('rejects reserved slugs at the OIDC pre-handler (defense-in-depth)', async () => {
+    // Even if a tenant named "api" or "_internal" somehow ended up in the
+    // tenants map (HubConfigSchema rejects it on parse, but be safe), the
+    // pre-handler short-circuits to 404 before the resolver consults the
+    // map.
+    const hubCfg = tmpHubConfig([]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      for (const slug of ['admin', 'api', '_internal']) {
+        const res = await server.app.inject({
+          method: 'GET',
+          url: `/${slug}/.well-known/openid-configuration`,
+        });
+        expect(res.statusCode).toBe(404);
+      }
+    } finally {
+      await server.close();
+    }
+  });
 });

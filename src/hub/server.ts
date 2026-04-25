@@ -5,9 +5,9 @@ import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
 import { createTenantRegistry, type TenantRegistry } from '@/hub/registry.js';
-import { deriveDefaultPublicUrl } from '@/hub/issuer.js';
-import { SLUG_REGEX, type HubConfig } from '@/hub/schema.js';
-import type { ActiveTenantState, TenantState } from '@/hub/tenant-state.js';
+import { deriveDefaultPublicUrl, requirePublicUrlOrSafeHost } from '@/hub/issuer.js';
+import { isReservedSlug, SLUG_REGEX, type HubConfig } from '@/hub/schema.js';
+import type { ActiveTenantState, ErrorTenantState, TenantState } from '@/hub/tenant-state.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
 import { registerComplete } from '@/oidc/complete.js';
 import { registerToken } from '@/oidc/token.js';
@@ -17,7 +17,8 @@ import { renderHubDashboard, type DashboardTenant } from '@/admin/dashboard.js';
 import { renderAdminPage } from '@/admin/page.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import { createEventsEmitter, registerEventsRoute } from '@/admin/events.js';
-import { html, renderToString } from '@/shared/html.js';
+import { buildAdminAllowedHosts, registerAdminGuard } from '@/admin/guard.js';
+import { html, type Html, renderToString } from '@/shared/html.js';
 
 export interface CreateHubServerOptions {
   hubConfigPath: string;
@@ -37,24 +38,27 @@ function resolveTenant(
 ):
   | { kind: 'ok'; tenant: ActiveTenantState }
   | { kind: 'not-found' }
-  | { kind: 'error'; tenant: TenantState & { status: 'error' } } {
+  | { kind: 'error'; tenant: ErrorTenantState } {
   if (!SLUG_REGEX.test(slug)) return { kind: 'not-found' };
+  if (isReservedSlug(slug)) return { kind: 'not-found' };
   const tenant = registry.get(slug);
   if (!tenant) return { kind: 'not-found' };
-  if (tenant.status === 'error') {
-    return { kind: 'error', tenant: tenant as TenantState & { status: 'error' } };
-  }
-  return { kind: 'ok', tenant: tenant as ActiveTenantState };
+  if (tenant.status === 'error') return { kind: 'error', tenant };
+  return { kind: 'ok', tenant };
 }
 
 export async function createHubServer(options: CreateHubServerOptions): Promise<HubServer> {
   const logger = options.logger ?? createLogger();
   const hubConfig = await loadHubConfig(options.hubConfigPath);
+  requirePublicUrlOrSafeHost({
+    host: hubConfig.server.host,
+    publicUrl: hubConfig.server.publicUrl,
+  });
   const publicUrl =
     hubConfig.server.publicUrl ??
     deriveDefaultPublicUrl({ host: hubConfig.server.host, port: hubConfig.server.port });
 
-  const registry = createTenantRegistry({ publicUrl });
+  const registry = createTenantRegistry({ publicUrl, logger });
   await registry.reconcile(hubConfig.tenants);
 
   const watcher: HubConfigWatcher = await watchHubConfig(options.hubConfigPath, {
@@ -67,9 +71,15 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
   });
 
   const app = Fastify({ loggerInstance: logger });
+  registerAdminGuard(app, {
+    allowedHosts: buildAdminAllowedHosts({
+      listenHost: hubConfig.server.host,
+      listenPort: hubConfig.server.port,
+      publicUrl: hubConfig.server.publicUrl,
+    }),
+  });
   await app.register(cors, {
     origin: true,
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
   await app.register(formbody);
@@ -126,13 +136,15 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     { prefix: '' },
   );
 
-  // Wire registry events → admin SSE emitter.
+  // Wire registry events → admin SSE emitter. Any of these registry events
+  // surfaces to dashboard clients as a single config-changed signal,
+  // prompting the dashboard to refetch.
   const eventsEmitter = createEventsEmitter();
-  registry.events.on('profilesChanged', ({ slug }) =>
-    eventsEmitter.emit({ type: 'config-changed', slug }),
-  );
-  registry.events.on('added', ({ slug }) => eventsEmitter.emit({ type: 'config-changed', slug }));
-  registry.events.on('removed', ({ slug }) => eventsEmitter.emit({ type: 'config-changed', slug }));
+  const forwardConfigChange = ({ slug }: { slug: string }): void =>
+    eventsEmitter.emit({ type: 'config-changed', slug });
+  registry.events.on('profilesChanged', forwardConfigChange);
+  registry.events.on('added', forwardConfigChange);
+  registry.events.on('removed', forwardConfigChange);
 
   // Admin dashboard.
   app.get('/admin', async (_req, reply) => {
@@ -248,32 +260,35 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
 }
 
 function renderHubLanding(input: { publicUrl: string; tenants: readonly TenantState[] }): string {
-  const items = input.tenants
-    .map(
-      (t) =>
-        `<li><code>${escapeHtml(t.slug)}</code> — <a href="/${encodeURIComponent(
-          t.slug,
-        )}/.well-known/openid-configuration">discovery</a> — status: ${escapeHtml(t.status)}</li>`,
-    )
-    .join('\n');
-  return `<!doctype html><html><head><meta charset="utf-8" /><title>dev-oidc Hub</title></head><body><h1>dev-oidc Hub</h1><p>Public URL: <code>${escapeHtml(
-    input.publicUrl,
-  )}</code></p><h2>Tenants (${input.tenants.length.toString()})</h2><ul>${items || '<li>(none)</li>'}</ul><p>Run <code>dev-oidc register &lt;path&gt;</code> to mount a project.</p></body></html>`;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => {
-    switch (ch) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      default:
-        return '&#39;';
-    }
-  });
+  const items: Html[] =
+    input.tenants.length === 0
+      ? [html`<li>(none)</li>`]
+      : input.tenants.map(
+          (t) =>
+            html`<li>
+              <code>${t.slug}</code> —
+              <a href="/${encodeURIComponent(t.slug)}/.well-known/openid-configuration"
+                >discovery</a
+              >
+              — status: ${t.status}
+            </li>`,
+        );
+  return renderToString(
+    html`<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>dev-oidc Hub</title>
+        </head>
+        <body>
+          <h1>dev-oidc Hub</h1>
+          <p>Public URL: <code>${input.publicUrl}</code></p>
+          <h2>Tenants (${input.tenants.length})</h2>
+          <ul>
+            ${items}
+          </ul>
+          <p>Run <code>dev-oidc register &lt;path&gt;</code> to mount a project.</p>
+        </body>
+      </html>`,
+  );
 }

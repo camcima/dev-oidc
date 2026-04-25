@@ -3,6 +3,7 @@ import path from 'node:path';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
+import { buildAdminAllowedHosts, registerAdminGuard } from '@/admin/guard.js';
 import { renderAdminPage } from '@/admin/page.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import type { Config } from '@/config/schema.js';
@@ -25,6 +26,16 @@ export interface CreateServerOptions {
   config: Config;
   configFilePath?: string;
   issuer: string; // injected from CLI in legacy mode (Phase 1 introduces flag)
+  /**
+   * Listen host & port. Used to build the admin Host-header allowlist (CSRF
+   * + DNS rebinding defense). The CLI passes the same values it uses for
+   * `app.listen`. Defaults are `127.0.0.1` and `8095` (matching the
+   * documented defaults) so test callers that use `app.inject` without
+   * binding don't need to pass these.
+   */
+  listenHost?: string;
+  listenPort?: number;
+  publicUrl?: string;
   logger?: DevOidcLogger;
 }
 
@@ -80,9 +91,15 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const getTenant = (_req: FastifyRequest): ActiveTenantState => tenant;
 
   const app = Fastify({ loggerInstance: logger });
+  registerAdminGuard(app, {
+    allowedHosts: buildAdminAllowedHosts({
+      listenHost: options.listenHost ?? '127.0.0.1',
+      listenPort: options.listenPort ?? 8095,
+      publicUrl: options.publicUrl,
+    }),
+  });
   await app.register(cors, {
     origin: true,
-    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
   await app.register(formbody);

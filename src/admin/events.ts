@@ -39,19 +39,29 @@ export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): voi
 
     const unsubscribe = deps.emitter.subscribe(send);
 
+    let cleanedUp = false;
+    const cleanup = (): void => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      clearInterval(keepalive);
+      unsubscribe();
+    };
+
     const keepalive = setInterval(() => {
-      if (reply.raw.writableEnded) return;
+      if (reply.raw.writableEnded) {
+        cleanup();
+        return;
+      }
       try {
         reply.raw.write(': keepalive\n\n');
       } catch {
-        // Socket closed between writableEnded check and write — let the 'close'
-        // handler clean up the interval and subscription.
+        cleanup();
       }
     }, 15_000);
 
-    request.raw.on('close', () => {
-      clearInterval(keepalive);
-      unsubscribe();
-    });
+    request.raw.on('close', cleanup);
+    reply.raw.on('close', cleanup);
+    reply.raw.on('finish', cleanup);
+    reply.raw.on('error', cleanup);
   });
 }

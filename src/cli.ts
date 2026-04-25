@@ -111,9 +111,10 @@ async function runStart(
       process.stderr.write('dev-oidc: --config requires a path\n');
       process.exit(1);
     }
-    const port = Number.parseInt((values.port as string) ?? '8095', 10);
-    const host = (values.host as string) ?? '127.0.0.1';
-    const publicUrl = values['public-url'] as string | undefined;
+    const portRaw = typeof values.port === 'string' ? values.port : '8095';
+    const port = Number.parseInt(portRaw, 10);
+    const host = typeof values.host === 'string' ? values.host : '127.0.0.1';
+    const publicUrl = typeof values['public-url'] === 'string' ? values['public-url'] : undefined;
     if (!Number.isFinite(port) || port < 0 || port > 65535) {
       process.stderr.write('dev-oidc: --port must be a valid port number\n');
       process.exit(1);
@@ -122,7 +123,7 @@ async function runStart(
       configPath: values.config,
       port,
       host,
-      publicUrl: typeof publicUrl === 'string' ? publicUrl : undefined,
+      publicUrl,
       logger,
     });
     logger.info(
