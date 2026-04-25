@@ -85,19 +85,22 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   });
 
   registerAuthorize(app, {
-    getTenant: () => ({
-      slug: '(legacy)',
-      configPath: options.configFilePath ?? '/dev/null',
-      status: 'active' as const,
-      issuer: runtime.get().issuer,
-      config: runtime.get(),
-      runtime,
-      keyMaterial,
-      jwks: jwksDocument,
-      codes,
-      pending,
-      watcher: null,
-    }),
+    getTenant: () => {
+      const config = runtime.get();
+      return {
+        slug: '(legacy)',
+        configPath: options.configFilePath ?? '/dev/null',
+        status: 'active' as const,
+        issuer: config.issuer,
+        config,
+        runtime,
+        keyMaterial,
+        jwks: jwksDocument,
+        codes,
+        pending,
+        watcher: null,
+      };
+    },
   });
   registerComplete(app, { runtime, pending, codes });
   registerToken(app, { runtime, codes, keyMaterial });
