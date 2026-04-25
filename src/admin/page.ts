@@ -106,7 +106,7 @@ const CLIENT_SCRIPT = `
         alert(err.error_description || err.details || err.error || 'Request failed');
       }
     });
-  })();
+  })()
 `.trim();
 
 // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
