@@ -1,6 +1,9 @@
+export function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
 export function computeIssuer(input: { publicUrl: string; slug: string }): string {
-  const stripped = input.publicUrl.replace(/\/+$/, '');
-  return `${stripped}/${input.slug}`;
+  return `${stripTrailingSlash(input.publicUrl)}/${input.slug}`;
 }
 
 const BIND_ALL_HOSTS = new Set(['0.0.0.0', '::', '0::', '[::]', '[::0]', '0:0:0:0:0:0:0:0']);

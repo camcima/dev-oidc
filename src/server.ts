@@ -20,6 +20,7 @@ import { createPendingAuthStore } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { renderIndexPage } from '@/index/page.js';
+import { stripTrailingSlash } from '@/hub/issuer.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CreateServerOptions {
@@ -44,10 +45,6 @@ export interface CreateServerOptions {
   listenPort?: number;
   publicUrl?: string;
   logger?: DevOidcLogger;
-}
-
-function stripTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
 }
 
 function deriveIssuer(options: CreateServerOptions): string {

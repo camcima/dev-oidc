@@ -3,10 +3,6 @@ import { isBindAllHost } from '@/hub/issuer.js';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', '[::1]', 'localhost']);
 
-function isLoopbackHost(host: string): boolean {
-  return LOOPBACK_HOSTS.has(host);
-}
-
 function safeParseUrl(value: string): URL | null {
   try {
     return new URL(value);
@@ -46,7 +42,7 @@ export function buildAdminAllowedHosts(input: BuildAllowedHostsInput): Set<strin
     allowed.add(`${input.listenHost}${portSuffix}`);
     allowed.add(input.listenHost);
   }
-  if (isLoopbackHost(input.listenHost) || isBindAllHost(input.listenHost)) {
+  if (LOOPBACK_HOSTS.has(input.listenHost) || isBindAllHost(input.listenHost)) {
     for (const lb of LOOPBACK_HOSTS) {
       allowed.add(`${lb}${portSuffix}`);
       allowed.add(lb);

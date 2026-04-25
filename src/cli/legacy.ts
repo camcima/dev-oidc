@@ -1,7 +1,6 @@
-// src/cli/legacy.ts
 import { loadConfig } from '@/config/loader.js';
 import { createDevOidcServer, type DevOidcServer } from '@/server.js';
-import { requirePublicUrlOrSafeHost } from '@/hub/issuer.js';
+import { requirePublicUrlOrSafeHost, stripTrailingSlash } from '@/hub/issuer.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 
 export interface LegacyStartOptions {
@@ -17,10 +16,6 @@ export interface LegacyStartResult {
   port: number;
   host: string;
   issuer: string;
-}
-
-function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, '');
 }
 
 export async function startLegacy(options: LegacyStartOptions): Promise<LegacyStartResult> {

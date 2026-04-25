@@ -47,6 +47,27 @@ function resolveTenant(
   return { kind: 'ok', tenant };
 }
 
+function toDashboardTenant(t: TenantState): DashboardTenant {
+  if (t.status === 'active') {
+    return {
+      slug: t.slug,
+      status: 'active',
+      issuer: t.issuer,
+      configPath: t.configPath,
+      profileCount: t.runtime.get().profiles.length,
+      lastError: null,
+    };
+  }
+  return {
+    slug: t.slug,
+    status: 'error',
+    issuer: null,
+    configPath: t.configPath,
+    profileCount: null,
+    lastError: t.lastError,
+  };
+}
+
 export async function createHubServer(options: CreateHubServerOptions): Promise<HubServer> {
   const logger = options.logger ?? createLogger();
   const hubConfig = await loadHubConfig(options.hubConfigPath);
@@ -100,8 +121,9 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
       return;
     }
     if (result.kind === 'error') {
-      const lastError = result.tenant.lastError;
-      void reply.code(503).send({ error: 'service_unavailable', error_description: lastError });
+      void reply
+        .code(503)
+        .send({ error: 'service_unavailable', error_description: result.tenant.lastError });
       return;
     }
     (req as FastifyRequest & { tenant: ActiveTenantState }).tenant = result.tenant;
@@ -148,26 +170,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
 
   // Admin dashboard.
   app.get('/admin', async (_req, reply) => {
-    const tenants: DashboardTenant[] = registry.list().map((t) => {
-      if (t.status === 'active') {
-        return {
-          slug: t.slug,
-          status: 'active' as const,
-          issuer: t.issuer,
-          configPath: t.configPath,
-          profileCount: t.runtime.get().profiles.length,
-          lastError: null,
-        };
-      }
-      return {
-        slug: t.slug,
-        status: 'error' as const,
-        issuer: null,
-        configPath: t.configPath,
-        profileCount: null,
-        lastError: t.lastError,
-      };
-    });
+    const tenants = registry.list().map(toDashboardTenant);
     return reply
       .code(200)
       .type('text/html; charset=utf-8')
@@ -175,28 +178,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
   });
 
   // Tenant summary JSON endpoint.
-  app.get('/admin/api/tenants', async () => {
-    return registry.list().map((t) => {
-      if (t.status === 'active') {
-        return {
-          slug: t.slug,
-          status: 'active' as const,
-          issuer: t.issuer,
-          configPath: t.configPath,
-          profileCount: t.runtime.get().profiles.length,
-          lastError: null,
-        };
-      }
-      return {
-        slug: t.slug,
-        status: 'error' as const,
-        issuer: null,
-        configPath: t.configPath,
-        profileCount: null,
-        lastError: t.lastError,
-      };
-    });
-  });
+  app.get('/admin/api/tenants', async () => registry.list().map(toDashboardTenant));
 
   // SSE events stream.
   registerEventsRoute(app, { emitter: eventsEmitter });
@@ -232,7 +214,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
       scope.addHook('preHandler', tenantPreHandler);
 
       registerProfilesRoutes(scope, {
-        getTenant: (req) => (req as FastifyRequest & { tenant: ActiveTenantState }).tenant,
+        getTenant,
         pathPrefix: '/admin/api/:slug',
       });
     },

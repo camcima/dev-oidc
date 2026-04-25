@@ -90,7 +90,7 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
     if (err instanceof Error && err.message === '__slug_conflict__' && conflictPath) {
       return {
         exitCode: 1,
-        stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath as string}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
+        stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
       };
     }
     // Lockfile timeouts, fs permission errors, malformed hub.json on read, etc.
@@ -140,7 +140,7 @@ export async function runUnregister(options: UnregisterOptions): Promise<Command
   }
   return {
     exitCode: 0,
-    stdout: `Unregistered "${options.slug}" → ${removedConfigPath as unknown as string}\n`,
+    stdout: `Unregistered "${options.slug}" → ${removedConfigPath!}\n`,
   };
 }
 

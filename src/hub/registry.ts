@@ -8,7 +8,7 @@ import { createPendingAuthStore } from '@/oidc/pending.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import type { HubTenantEntry } from '@/hub/schema.js';
-import type { ActiveTenantState, ErrorTenantState, TenantState } from '@/hub/tenant-state.js';
+import type { ActiveTenantState, TenantState } from '@/hub/tenant-state.js';
 import { computeIssuer } from '@/hub/issuer.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 
@@ -78,26 +78,23 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
     try {
       config = await loadConfig(entry.configPath);
     } catch (err) {
-      const lastError = err instanceof Error ? err.message : String(err);
-      const errorState: ErrorTenantState = {
+      return {
         slug: entry.slug,
         configPath: entry.configPath,
         status: 'error',
-        lastError,
+        lastError: err instanceof Error ? err.message : String(err),
       };
-      return errorState;
     }
 
     let keyMaterial;
     try {
       keyMaterial = await createKeyMaterial(config.signingKey, { configDir });
     } catch (err) {
-      const lastError = err instanceof Error ? err.message : String(err);
       return {
         slug: entry.slug,
         configPath: entry.configPath,
         status: 'error',
-        lastError,
+        lastError: err instanceof Error ? err.message : String(err),
       };
     }
 
