@@ -7,6 +7,13 @@
       "clientId": "my-app",
       "redirectUris": ["http://localhost:5173/auth/callback"],
       "audience": "my-api"
+    },
+    {
+      "clientId": "confidential-app",
+      "clientSecret": "example-secret-replace-me",
+      "redirectUris": ["http://localhost:5174/auth/callback"],
+      "postLogoutRedirectUris": ["http://localhost:5174/"],
+      "audience": "confidential-api"
     }
   ],
   "profiles": [

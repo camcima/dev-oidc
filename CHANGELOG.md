@@ -18,6 +18,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Default dev-oidc port and documentation examples now use `8095` instead of `8080` to reduce common local port collisions.
 - README expanded: full-featured `docker-compose.yml` example with volume + healthcheck, "Using dev-oidc in your project" integration walkthrough, every config field documented inline, troubleshooting section, signing-key persistence guide.
 
+## [0.1.0] — 2026-04-25
+
+### Breaking
+
+- `scope` is now propagated end-to-end. The `/token` response `scope` field reflects the granted scope rather than the previously-hardcoded `"openid profile email"`. Apps that asserted on the old hardcoded value need updates.
+- `/authorize` rejects requests whose `scope` does not include `openid` with `400 invalid_scope`.
+- Refresh tokens are single-use; reuse returns `400 invalid_grant`. Apps must capture each new `refresh_token` from `/token` responses.
+- `/logout` without a `post_logout_redirect_uri` returns a 200 HTML confirmation page instead of redirecting to `/`.
+
+### Added
+
+- `GET /` landing page with discovery, JWKS, and admin links.
+- Optional `clientSecret` on clients; supports both `client_secret_post` and `client_secret_basic` (with `WWW-Authenticate: Basic realm="dev-oidc"` on 401 responses).
+- `ES256` signing algorithm; configurable via `signingKey.alg`.
+- Access tokens carry a `scope` claim.
+
+### Changed
+
+- JWKS document is built once at startup rather than rebuilt per request.
+- Identical config updates from the file watcher and admin writes are deduplicated (no more double `config-changed` SSE events).
+- The login and admin pages render via a tagged-template renderer; React is no longer a dependency.
+- `DevOidcLogger` type is `FastifyBaseLogger`; the previous `as unknown as FastifyInstance` cast is gone.
+
 ## 0.1.0-alpha.1 - 2026-04-23
 
 ### Added
