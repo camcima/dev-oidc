@@ -97,11 +97,24 @@ async function runStart(
     return;
   }
 
-  // Phase 3 wires Hub-mode startup here.
-  process.stderr.write(
-    'dev-oidc: Hub mode not yet implemented; pass `--config <path>` for legacy mode\n',
+  // Hub mode
+  const { createHubServer } = await import('@/hub/server.js');
+  const { defaultHubConfigPath } = await import('@/hub/loader.js');
+  const hubConfigPath =
+    typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
+  const server = await createHubServer({ hubConfigPath, logger });
+  const { host, port } = server.hubConfig.server;
+  await server.app.listen({ port, host });
+  logger.info(
+    {
+      publicUrl: server.hubConfig.server.publicUrl ?? `http://${host}:${port}`,
+      port,
+      host,
+      tenants: server.registry.list().length,
+    },
+    'dev-oidc listening (hub)',
   );
-  process.exit(2);
+  setupShutdown(server.close, logger);
 }
 
 function setupShutdown(close: () => Promise<void>, logger: ReturnType<typeof createLogger>): void {
