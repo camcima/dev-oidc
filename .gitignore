@@ -4,5 +4,6 @@ coverage
 *.log
 .DS_Store
 .vscode
+.codex
 .env
 .env.*
