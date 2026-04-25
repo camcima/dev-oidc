@@ -10,7 +10,7 @@ Nevertheless, if you find a security issue that could affect development workflo
 
 Please report security issues via **private disclosure**:
 
-1. Open a [security advisory](https://github.com/OWNER/dev-oidc/security/advisories/new) on GitHub.
+1. Open a [security advisory](https://github.com/camcima/dev-oidc/security/advisories/new) on GitHub.
 2. Or email the maintainers (see `MAINTAINERS` in the repo, if present).
 
 Do **not** open a public issue for security matters.

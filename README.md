@@ -2,9 +2,9 @@
 
 A minimal, config-driven OIDC provider for local development.
 
-**Status:** Pre-release. Intended to ship to npm/OCI registries in a future milestone.
+**Status:** Pre-release. npm publishing is automated locally with release-it.
 
-[![CI](https://github.com/OWNER/dev-oidc/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/dev-oidc/actions/workflows/ci.yml)
+[![CI](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml/badge.svg)](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/dev-oidc.svg)](https://www.npmjs.com/package/dev-oidc)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
@@ -60,7 +60,7 @@ The same code path runs in production — only the URLs change.
 docker run --rm -p 8080:8080 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  dev-oidc:latest
+  ghcr.io/camcima/dev-oidc:latest
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -76,7 +76,7 @@ The image listens on port `8080` inside the container; map it to whatever you wa
 # docker-compose.yml
 services:
   dev-oidc:
-    image: dev-oidc:latest
+    image: ghcr.io/camcima/dev-oidc:latest
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
@@ -301,6 +301,24 @@ Bind-mount file watching is unreliable on Docker Desktop for macOS/WSL2. `docker
 ## Contributing
 
 Contributions welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, style, and commit conventions. Security issues: please read [SECURITY.md](./SECURITY.md) first.
+
+## Releasing
+
+Releases are cut locally with release-it, not from GitHub Actions.
+
+```bash
+npm run release
+```
+
+For the current alpha line:
+
+```bash
+npm run release:alpha
+```
+
+release-it runs typecheck, lint, formatting checks, and tests before selecting a version. After it bumps `package.json` and `package-lock.json`, it builds `dist`, verifies the npm package with `npm pack --dry-run`, commits, tags, pushes, and publishes to npm.
+
+Use `npm run release:dry` to preview the release flow without writing changes or publishing.
 
 ## Changelog
 
