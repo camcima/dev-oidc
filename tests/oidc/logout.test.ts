@@ -6,8 +6,8 @@ import { registerLogout } from '@/oidc/logout.js';
 
 function buildConfig(): Config {
   return {
-    issuer: 'http://localhost:8080',
-    port: 8080,
+    issuer: 'http://localhost:8095',
+    port: 8095,
     host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [

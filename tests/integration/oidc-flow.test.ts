@@ -11,7 +11,7 @@ function pkcePair() {
 }
 
 const config: Config = {
-  issuer: 'http://localhost:8080',
+  issuer: 'http://localhost:8095',
   port: 0,
   host: '127.0.0.1',
   signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
@@ -94,7 +94,7 @@ describe('integration: full auth-code + PKCE flow', () => {
       const pubKey = await jose.importJWK(jwksBody.keys[0]!, 'RS256');
 
       const { payload } = await jose.jwtVerify(tokens.access_token, pubKey, {
-        issuer: 'http://localhost:8080',
+        issuer: 'http://localhost:8095',
         audience: 'my-api',
       });
       expect(payload.sub).toBe('bob');
@@ -114,9 +114,9 @@ describe('integration: full auth-code + PKCE flow', () => {
       });
       expect(res.statusCode).toBe(200);
       const doc = res.json() as Record<string, unknown>;
-      expect(doc.authorization_endpoint).toBe('http://localhost:8080/authorize');
-      expect(doc.token_endpoint).toBe('http://localhost:8080/token');
-      expect(doc.jwks_uri).toBe('http://localhost:8080/.well-known/jwks.json');
+      expect(doc.authorization_endpoint).toBe('http://localhost:8095/authorize');
+      expect(doc.token_endpoint).toBe('http://localhost:8095/token');
+      expect(doc.jwks_uri).toBe('http://localhost:8095/.well-known/jwks.json');
     } finally {
       await server.close();
     }

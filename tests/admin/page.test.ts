@@ -4,8 +4,8 @@ import type { Config } from '@/config/schema.js';
 
 function config(): Config {
   return {
-    issuer: 'http://localhost:8080',
-    port: 8080,
+    issuer: 'http://localhost:8095',
+    port: 8095,
     host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
@@ -46,7 +46,7 @@ describe('renderAdminPage', () => {
 
   it('embeds a raw-config JSON view', () => {
     const html = renderAdminPage(config());
-    expect(html).toContain('"issuer": "http://localhost:8080"');
+    expect(html).toContain('"issuer": "http://localhost:8095"');
   });
 
   it('escapes HTML-special characters in profile fields', () => {

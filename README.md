@@ -37,18 +37,18 @@ Wherever your app reads its OIDC settings (usually env vars), swap the provider 
 
 | Your app's config key       | Production value                                  | Dev value                                             |
 | --------------------------- | ------------------------------------------------- | ----------------------------------------------------- |
-| `OIDC_ISSUER` / `authority` | `https://login.microsoftonline.com/<tenant>/v2.0` | `http://localhost:8080`                               |
+| `OIDC_ISSUER` / `authority` | `https://login.microsoftonline.com/<tenant>/v2.0` | `http://localhost:8095`                               |
 | `OIDC_CLIENT_ID`            | your app registration ID                          | matches `clients[].clientId` in dev-oidc config       |
 | `OIDC_AUDIENCE`             | your API's audience                               | matches `clients[].audience` in dev-oidc config       |
 | Redirect URI                | your prod callback URL                            | matches `clients[].redirectUris[]` in dev-oidc config |
 
 ### 3. Use the login flow
 
-1. Your app redirects to `http://localhost:8080/authorize?client_id=...&redirect_uri=...&response_type=code&scope=openid&code_challenge=...&code_challenge_method=S256`.
+1. Your app redirects to `http://localhost:8095/authorize?client_id=...&redirect_uri=...&response_type=code&scope=openid&code_challenge=...&code_challenge_method=S256`.
 2. dev-oidc renders a tile per `profile` in the config.
 3. User clicks a tile → dev-oidc redirects to your app's `redirect_uri` with a `code`.
-4. Your app exchanges the code for tokens at `http://localhost:8080/token`.
-5. Your app verifies the JWT using the JWKS at `http://localhost:8080/.well-known/jwks.json`.
+4. Your app exchanges the code for tokens at `http://localhost:8095/token`.
+5. Your app verifies the JWT using the JWKS at `http://localhost:8095/.well-known/jwks.json`.
 
 The same code path runs in production — only the URLs change.
 
@@ -57,7 +57,7 @@ The same code path runs in production — only the URLs change.
 ## Run mode 1 — Docker (recommended for teams)
 
 ```bash
-docker run --rm -p 8080:8080 \
+docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
   camcima2/dev-oidc:latest
@@ -66,7 +66,7 @@ docker run --rm -p 8080:8080 \
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
 - `/data` — optional persistent volume for the signing key (see [Signing-key persistence](#signing-key-persistence)).
 
-The image listens on port `8080` inside the container; map it to whatever you want on the host.
+The image listens on port `8095` inside the container; map it to whatever you want on the host.
 
 ---
 
@@ -81,11 +81,11 @@ services:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
     ports:
-      - '8080:8080'
+      - '8095:8095'
     healthcheck:
       test:
         - CMD-SHELL
-        - 'wget -q -O- http://127.0.0.1:8080/.well-known/openid-configuration > /dev/null || exit 1'
+        - 'wget -q -O- http://127.0.0.1:8095/.well-known/openid-configuration > /dev/null || exit 1'
       interval: 5s
       timeout: 2s
       retries: 10
@@ -96,7 +96,7 @@ services:
       dev-oidc:
         condition: service_healthy
     environment:
-      OIDC_ISSUER: http://dev-oidc:8080
+      OIDC_ISSUER: http://dev-oidc:8095
       OIDC_CLIENT_ID: my-app
       OIDC_AUDIENCE: my-api
 
@@ -106,9 +106,9 @@ volumes:
 
 **Important notes:**
 
-- Use `http://dev-oidc:8080` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS.
-- Use `http://localhost:8080` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names.
-- Your dev-oidc config's `issuer` must match whichever URL the JWT's recipients expect. For apps where both browser and server code need to reach dev-oidc, `http://localhost:8080` is usually the right choice (browsers require it, servers can still reach it via the mapped port).
+- Use `http://dev-oidc:8095` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS.
+- Use `http://localhost:8095` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names.
+- Your dev-oidc config's `issuer` must match whichever URL the JWT's recipients expect. For apps where both browser and server code need to reach dev-oidc, `http://localhost:8095` is usually the right choice (browsers require it, servers can still reach it via the mapped port).
 - `"host": "0.0.0.0"` is required in the config so Fastify binds all interfaces inside the container.
 
 ---
@@ -138,8 +138,8 @@ Every field in `dev-oidc.config.json`:
 
 ```jsonc
 {
-  "issuer": "http://localhost:8080", // Required. Base URL of this instance.
-  "port": 8080, // Default 8080. TCP port to listen on.
+  "issuer": "http://localhost:8095", // Required. Base URL of this instance.
+  "port": 8095, // Default 8095. TCP port to listen on.
   "host": "127.0.0.1", // Default 127.0.0.1. Use 0.0.0.0 in containers.
   "signingKey": {
     "kid": "dev-key-1", // Required. Key ID surfaced in JWKS + JWT header.
@@ -246,7 +246,7 @@ CORS is permissive by default (`Access-Control-Allow-Origin` reflects the reques
 
 ## Admin UI
 
-Visit `http://localhost:8080/admin` to:
+Visit `http://localhost:8095/admin` to:
 
 - View all configured profiles.
 - Add, edit, or delete profiles. Changes write atomically to the JSON config file on disk.

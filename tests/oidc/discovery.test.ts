@@ -3,12 +3,12 @@ import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 
 describe('buildDiscoveryDocument', () => {
   it('returns a conformant doc with all required endpoints', () => {
-    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8080' });
-    expect(doc.issuer).toBe('http://localhost:8080');
-    expect(doc.authorization_endpoint).toBe('http://localhost:8080/authorize');
-    expect(doc.token_endpoint).toBe('http://localhost:8080/token');
-    expect(doc.end_session_endpoint).toBe('http://localhost:8080/logout');
-    expect(doc.jwks_uri).toBe('http://localhost:8080/.well-known/jwks.json');
+    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8095' });
+    expect(doc.issuer).toBe('http://localhost:8095');
+    expect(doc.authorization_endpoint).toBe('http://localhost:8095/authorize');
+    expect(doc.token_endpoint).toBe('http://localhost:8095/token');
+    expect(doc.end_session_endpoint).toBe('http://localhost:8095/logout');
+    expect(doc.jwks_uri).toBe('http://localhost:8095/.well-known/jwks.json');
     expect(doc.response_types_supported).toContain('code');
     expect(doc.grant_types_supported).toEqual(
       expect.arrayContaining(['authorization_code', 'refresh_token']),
@@ -18,7 +18,7 @@ describe('buildDiscoveryDocument', () => {
   });
 
   it('strips trailing slashes from issuer', () => {
-    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8080/' });
-    expect(doc.issuer).toBe('http://localhost:8080');
+    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8095/' });
+    expect(doc.issuer).toBe('http://localhost:8095');
   });
 });

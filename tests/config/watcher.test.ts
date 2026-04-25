@@ -27,7 +27,7 @@ describe('watchConfig', () => {
 
   it('emits a reload event when the file changes (debounced)', async () => {
     const file = path.join(tmpDir, 'config.json');
-    writeValidConfig(file, 'http://localhost:8080');
+    writeValidConfig(file, 'http://localhost:8095');
 
     const events: string[] = [];
     const watcher = await watchConfig(file, {
@@ -46,7 +46,7 @@ describe('watchConfig', () => {
 
   it('emits an error when the reloaded file is invalid; keeps last-good in memory', async () => {
     const file = path.join(tmpDir, 'config-err.json');
-    writeValidConfig(file, 'http://localhost:8080');
+    writeValidConfig(file, 'http://localhost:8095');
 
     const errors: Error[] = [];
     const reloads: string[] = [];

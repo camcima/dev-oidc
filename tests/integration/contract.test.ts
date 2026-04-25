@@ -5,7 +5,7 @@ import type { Config } from '@/config/schema.js';
 import { createDevOidcServer } from '@/server.js';
 
 const config: Config = {
-  issuer: 'http://localhost:8080',
+  issuer: 'http://localhost:8095',
   port: 0,
   host: '127.0.0.1',
   signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
@@ -74,7 +74,7 @@ describe('contract: tokens verify via real HTTP JWKS fetch', () => {
 
       const jwks = jose.createRemoteJWKSet(new URL(`${baseUrl}/.well-known/jwks.json`));
       const { payload } = await jose.jwtVerify(tokens.access_token, jwks, {
-        issuer: 'http://localhost:8080',
+        issuer: 'http://localhost:8095',
         audience: 'my-api',
       });
 

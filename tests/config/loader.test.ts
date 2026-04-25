@@ -8,7 +8,7 @@ describe('loadConfig', () => {
   const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-'));
 
   const valid = {
-    issuer: 'http://localhost:8080',
+    issuer: 'http://localhost:8095',
     signingKey: { kid: 'k1' },
     clients: [
       {
@@ -25,8 +25,8 @@ describe('loadConfig', () => {
     writeFileSync(file, JSON.stringify(valid));
 
     const config = await loadConfig(file);
-    expect(config.issuer).toBe('http://localhost:8080');
-    expect(config.port).toBe(8080);
+    expect(config.issuer).toBe('http://localhost:8095');
+    expect(config.port).toBe(8095);
     expect(config.host).toBe('127.0.0.1');
     expect(config.subjectClaim).toBe('sub');
     expect(config.tokenTtlSeconds).toBe(900);

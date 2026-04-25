@@ -7,7 +7,7 @@ import { createDevOidcServer } from '@/server.js';
 
 function seed(file: string): void {
   const config: Config = {
-    issuer: 'http://localhost:8080',
+    issuer: 'http://localhost:8095',
     port: 0,
     host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },

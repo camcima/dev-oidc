@@ -48,7 +48,7 @@ Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`). Examples:
 
 ```bash
 docker build -t dev-oidc:local .
-docker run --rm -p 8080:8080 -v "$(pwd)/examples:/config:ro" dev-oidc:local
+docker run --rm -p 8095:8095 -v "$(pwd)/examples:/config:ro" dev-oidc:local
 ```
 
 ## Questions

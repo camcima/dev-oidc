@@ -30,7 +30,7 @@ const ProfileSchema = z.object({
 
 export const ConfigSchema = z.object({
   issuer: z.string().url(),
-  port: z.number().int().positive().default(8080),
+  port: z.number().int().positive().default(8095),
   host: z.string().default('127.0.0.1'),
   signingKey: SigningKeySchema,
   clients: z.array(ClientSchema).min(1),

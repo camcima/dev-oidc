@@ -3,7 +3,7 @@ import { ConfigSchema } from '@/config/schema.js';
 
 describe('ConfigSchema', () => {
   const minimalValid = {
-    issuer: 'http://localhost:8080',
+    issuer: 'http://localhost:8095',
     signingKey: { kid: 'k1' },
     clients: [
       {
@@ -73,10 +73,10 @@ describe('ConfigSchema', () => {
     expect(result.data.subjectClaim).toBe('sub');
   });
 
-  it('defaults port to 8080', () => {
+  it('defaults port to 8095', () => {
     const result = ConfigSchema.safeParse(minimalValid);
     if (!result.success) throw result.error;
-    expect(result.data.port).toBe(8080);
+    expect(result.data.port).toBe(8095);
   });
 
   it('defaults host to 127.0.0.1', () => {

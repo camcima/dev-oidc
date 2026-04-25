@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
+- Default dev-oidc port and documentation examples now use `8095` instead of `8080` to reduce common local port collisions.
 - README expanded: full-featured `docker-compose.yml` example with volume + healthcheck, "Using dev-oidc in your project" integration walkthrough, every config field documented inline, troubleshooting section, signing-key persistence guide.
 
 ## 0.1.0-alpha.1 - 2026-04-23

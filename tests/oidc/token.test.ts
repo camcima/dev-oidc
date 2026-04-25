@@ -11,8 +11,8 @@ import { registerToken } from '@/oidc/token.js';
 
 function buildConfig(): Config {
   return {
-    issuer: 'http://localhost:8080',
-    port: 8080,
+    issuer: 'http://localhost:8095',
+    port: 8095,
     host: '127.0.0.1',
     signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
     clients: [
@@ -87,7 +87,7 @@ describe('POST /token (authorization_code)', () => {
     const { payload } = await jose.jwtVerify(
       body.access_token,
       await jose.importJWK(keyMaterial.publicJwk, 'RS256'),
-      { issuer: 'http://localhost:8080', audience: 'my-api' },
+      { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
     expect(payload.email).toBe('a@x.com');
@@ -183,7 +183,7 @@ describe('POST /token (refresh_token)', () => {
     const { payload } = await jose.jwtVerify(
       body.access_token,
       await jose.importJWK(keyMaterial.publicJwk, 'RS256'),
-      { issuer: 'http://localhost:8080', audience: 'my-api' },
+      { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
     await app.close();

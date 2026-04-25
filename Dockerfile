@@ -20,6 +20,6 @@ COPY --from=builder /app/dist ./dist
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 
-EXPOSE 8080
+EXPOSE 8095
 ENTRYPOINT ["node", "dist/cli.js"]
 CMD ["start", "--config", "/config/config.json"]
