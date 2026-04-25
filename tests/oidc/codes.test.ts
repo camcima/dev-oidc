@@ -54,6 +54,18 @@ describe('CodeStore (refresh tokens)', () => {
     expect(consumed?.scope).toBe('openid profile');
   });
 
+  it('rotates: a refresh token is single-use; second consumption returns null', () => {
+    const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
+    const token = store.issueRefresh({
+      clientId: 'c1',
+      profileId: 'alice',
+      scope: 'openid',
+    });
+
+    expect(store.consumeRefresh(token)?.profileId).toBe('alice');
+    expect(store.consumeRefresh(token)).toBeNull();
+  });
+
   it('refresh token expires after TTL', () => {
     vi.useFakeTimers();
     const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 1_000 });

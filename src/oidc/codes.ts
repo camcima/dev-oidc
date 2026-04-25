@@ -61,10 +61,8 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
     consumeRefresh(token) {
       const entry = refresh.get(token);
       if (!entry) return null;
-      if (isExpired(entry)) {
-        refresh.delete(token);
-        return null;
-      }
+      refresh.delete(token);
+      if (isExpired(entry)) return null;
       return entry.value;
     },
   };

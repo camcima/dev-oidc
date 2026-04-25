@@ -199,6 +199,43 @@ describe('POST /token (refresh_token)', () => {
     await app.close();
   });
 
+  it('rotates the refresh token: the old one is rejected after first use', async () => {
+    const { app, codes } = await buildApp();
+    const oldToken = codes.issueRefresh({
+      clientId: 'my-app',
+      profileId: 'alice',
+      scope: 'openid profile',
+    });
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: oldToken,
+        client_id: 'my-app',
+      }).toString(),
+    });
+    expect(first.statusCode).toBe(200);
+    const newToken = (first.json() as { refresh_token: string }).refresh_token;
+    expect(newToken).not.toBe(oldToken);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: oldToken,
+        client_id: 'my-app',
+      }).toString(),
+    });
+    expect(second.statusCode).toBe(400);
+    expect(second.json().error).toBe('invalid_grant');
+    await app.close();
+  });
+
   it('rejects unknown refresh token with invalid_grant', async () => {
     const { app } = await buildApp();
     const res = await app.inject({
