@@ -46,10 +46,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   });
   const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
 
-  const rawApp = Fastify({ loggerInstance: logger });
-  // Cast to the default FastifyInstance type so that register helpers typed
-  // against FastifyBaseLogger (the Fastify default) accept this instance.
-  const app = rawApp as unknown as FastifyInstance;
+  const app = Fastify({ loggerInstance: logger });
 
   // Permissive CORS: dev-oidc is a development tool; any localhost origin
   // (Console dev servers, test harnesses, etc.) needs to fetch the discovery
