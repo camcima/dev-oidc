@@ -82,14 +82,17 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
     const config = deps.runtime.get();
     const client = config.clients.find((c) => c.clientId === creds.clientId);
     if (!client) {
-      return reply.code(401).header('www-authenticate', 'Basic').send({ error: 'invalid_client' });
+      return reply
+        .code(401)
+        .header('www-authenticate', 'Basic realm="dev-oidc"')
+        .send({ error: 'invalid_client' });
     }
 
     if (client.clientSecret) {
       if (!creds.secret || !constantTimeEqual(client.clientSecret, creds.secret)) {
         return reply
           .code(401)
-          .header('www-authenticate', 'Basic')
+          .header('www-authenticate', 'Basic realm="dev-oidc"')
           .send({ error: 'invalid_client' });
       }
     }
