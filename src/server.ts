@@ -102,7 +102,24 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
       };
     },
   });
-  registerComplete(app, { runtime, pending, codes });
+  registerComplete(app, {
+    getTenant: () => {
+      const config = runtime.get();
+      return {
+        slug: '(legacy)',
+        configPath: options.configFilePath ?? '/dev/null',
+        status: 'active' as const,
+        issuer: config.issuer,
+        config,
+        runtime,
+        keyMaterial,
+        jwks: jwksDocument,
+        codes,
+        pending,
+        watcher: null,
+      };
+    },
+  });
   registerToken(app, { runtime, codes, keyMaterial });
   registerLogout(app, { runtime });
 
