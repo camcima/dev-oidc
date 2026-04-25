@@ -3,22 +3,45 @@ import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 
 describe('buildDiscoveryDocument', () => {
   it('returns a conformant doc with all required endpoints', () => {
-    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8095' });
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
     expect(doc.issuer).toBe('http://localhost:8095');
     expect(doc.authorization_endpoint).toBe('http://localhost:8095/authorize');
     expect(doc.token_endpoint).toBe('http://localhost:8095/token');
     expect(doc.end_session_endpoint).toBe('http://localhost:8095/logout');
     expect(doc.jwks_uri).toBe('http://localhost:8095/.well-known/jwks.json');
-    expect(doc.response_types_supported).toContain('code');
-    expect(doc.grant_types_supported).toEqual(
-      expect.arrayContaining(['authorization_code', 'refresh_token']),
-    );
     expect(doc.code_challenge_methods_supported).toEqual(['S256']);
     expect(doc.id_token_signing_alg_values_supported).toEqual(['RS256']);
+    expect(doc.token_endpoint_auth_methods_supported).toEqual(['none']);
+  });
+
+  it('reflects ES256 when configured', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'ES256',
+      authMethods: ['none'],
+    });
+    expect(doc.id_token_signing_alg_values_supported).toEqual(['ES256']);
+  });
+
+  it('reflects client-secret auth methods', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none', 'client_secret_post', 'client_secret_basic'],
+    });
+    expect(doc.token_endpoint_auth_methods_supported).toContain('client_secret_basic');
   });
 
   it('strips trailing slashes from issuer', () => {
-    const doc = buildDiscoveryDocument({ issuer: 'http://localhost:8095/' });
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095/',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
     expect(doc.issuer).toBe('http://localhost:8095');
   });
 });

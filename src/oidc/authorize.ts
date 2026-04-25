@@ -59,6 +59,15 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       });
     }
 
+    const requestedScope = query.scope ?? 'openid';
+    const scopeTokens = requestedScope.split(/\s+/).filter(Boolean);
+    if (!scopeTokens.includes('openid')) {
+      return reply.code(400).send({
+        error: 'invalid_scope',
+        error_description: 'scope must contain "openid"',
+      });
+    }
+
     const pendingAuthId = deps.pending.create({
       clientId: client.clientId,
       redirectUri: query.redirect_uri,
@@ -66,7 +75,7 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       codeChallengeMethod: 'S256',
       nonce: query.nonce ?? '',
       state: query.state ?? '',
-      scope: query.scope ?? 'openid',
+      scope: requestedScope,
     });
 
     const html = renderLoginPage({

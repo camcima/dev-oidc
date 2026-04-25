@@ -3,38 +3,37 @@ import { dirname } from 'node:path';
 import * as jose from 'jose';
 import type { SigningKey } from '@/config/schema.js';
 
+export type SigningAlg = 'RS256' | 'ES256';
+
 export interface KeyMaterial {
   kid: string;
-  alg: 'RS256';
+  alg: SigningAlg;
   privateKey: jose.KeyLike;
   publicJwk: jose.JWK;
 }
 
 export async function createKeyMaterial(config: SigningKey): Promise<KeyMaterial> {
   if (config.source === 'generate') {
-    return generateEphemeralKey(config.kid);
+    return generateEphemeralKey(config.kid, config.alg);
   }
 
-  // `file:<path>` — load the JWK from disk if it exists, otherwise generate
-  // and persist one. Persisted keys survive container restarts so JWTs minted
-  // before the restart remain verifiable against the same public key.
   const filePath = config.source.slice('file:'.length);
-  const existing = await loadKeyFromFile(filePath, config.kid);
+  const existing = await loadKeyFromFile(filePath, config.kid, config.alg);
   if (existing) return existing;
-  const generated = await generateEphemeralKey(config.kid);
+  const generated = await generateEphemeralKey(config.kid, config.alg);
   await saveKeyToFile(filePath, generated);
   return generated;
 }
 
-async function generateEphemeralKey(kid: string): Promise<KeyMaterial> {
-  const { privateKey, publicKey } = await jose.generateKeyPair('RS256', { extractable: true });
+async function generateEphemeralKey(kid: string, alg: SigningAlg): Promise<KeyMaterial> {
+  const { privateKey, publicKey } = await jose.generateKeyPair(alg, { extractable: true });
   const jwk: jose.JWK = {
     ...(await jose.exportJWK(publicKey)),
     kid,
     use: 'sig',
-    alg: 'RS256',
+    alg,
   };
-  return { kid, alg: 'RS256', privateKey, publicJwk: jwk };
+  return { kid, alg, privateKey, publicJwk: jwk };
 }
 
 interface PersistedKey {
@@ -43,7 +42,11 @@ interface PersistedKey {
   publicJwk: jose.JWK;
 }
 
-async function loadKeyFromFile(filePath: string, kid: string): Promise<KeyMaterial | null> {
+async function loadKeyFromFile(
+  filePath: string,
+  kid: string,
+  configAlg: SigningAlg,
+): Promise<KeyMaterial | null> {
   let raw: string;
   try {
     raw = await readFile(filePath, 'utf8');
@@ -61,8 +64,17 @@ async function loadKeyFromFile(filePath: string, kid: string): Promise<KeyMateri
     );
   }
 
-  const privateKey = (await jose.importJWK(parsed.privateJwk, 'RS256')) as jose.KeyLike;
-  return { kid, alg: 'RS256', privateKey, publicJwk: parsed.publicJwk };
+  const persistedAlg = (parsed.publicJwk.alg as SigningAlg | undefined) ?? 'RS256';
+  if (persistedAlg !== configAlg) {
+    throw new Error(
+      `dev-oidc: signing key at ${filePath} has alg "${persistedAlg}", but config expects "${configAlg}". ` +
+        `Either align the config alg, delete the file to regenerate, or use a different path.`,
+    );
+  }
+
+  const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.KeyLike;
+  const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
+  return { kid, alg: configAlg, privateKey, publicJwk };
 }
 
 async function saveKeyToFile(filePath: string, material: KeyMaterial): Promise<void> {

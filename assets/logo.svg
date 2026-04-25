@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 100" role="img" aria-label="dev-oidc logo">
+  <defs>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .logo-text { fill: #e6edf3; }
+        .key-stroke { stroke: #58a6ff; fill: none; }
+        .key-fill { fill: #58a6ff; }
+      }
+      @media (prefers-color-scheme: light) {
+        .logo-text { fill: #24292f; }
+        .key-stroke { stroke: #0969da; fill: none; }
+        .key-fill { fill: #0969da; }
+      }
+    </style>
+  </defs>
+  <!-- Key bow -->
+  <circle class="key-stroke" cx="35" cy="50" r="20" stroke-width="5"/>
+  <circle class="key-fill" cx="35" cy="50" r="5"/>
+  <!-- Key shaft -->
+  <rect class="key-fill" x="55" y="46" width="55" height="8"/>
+  <!-- Key teeth -->
+  <rect class="key-fill" x="88" y="54" width="7" height="11"/>
+  <rect class="key-fill" x="100" y="54" width="7" height="15"/>
+  <!-- Logo text -->
+  <text class="logo-text" x="130" y="66" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="bold" letter-spacing="4">dev-oidc</text>
+</svg>

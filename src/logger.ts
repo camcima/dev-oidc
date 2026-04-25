@@ -1,6 +1,7 @@
-import pino, { type Logger } from 'pino';
+import pino from 'pino';
+import type { FastifyBaseLogger } from 'fastify';
 
-export type DevOidcLogger = Logger;
+export type DevOidcLogger = FastifyBaseLogger;
 
 export function createLogger(options?: { level?: string }): DevOidcLogger {
   return pino({

@@ -56,6 +56,7 @@ export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void
       codeChallenge: pending.codeChallenge,
       nonce: pending.nonce,
       redirectUri: allowedUri,
+      scope: pending.scope,
     });
 
     // allowedUri is sourced directly from client.redirectUris (config constant).

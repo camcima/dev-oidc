@@ -45,11 +45,13 @@ describe('GET /logout', () => {
     await app.close();
   });
 
-  it('redirects to "/" when no post_logout_redirect_uri provided', async () => {
+  it('returns a 200 HTML confirmation page when no post_logout_redirect_uri is provided', async () => {
     const { app } = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/logout' });
-    expect(res.statusCode).toBe(302);
-    expect(res.headers.location).toBe('/');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/html');
+    expect(res.payload).toContain('Signed out');
+    expect(res.payload).toMatch(/href="\/"/);
     await app.close();
   });
 

@@ -17,6 +17,7 @@ import { createCodeStore, type CodeStore } from '@/oidc/codes.js';
 import { createPendingAuthStore, type PendingAuthStore } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
+import { renderIndexPage } from '@/index/page.js';
 
 export interface CreateServerOptions {
   config: Config;
@@ -37,17 +38,16 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const logger = options.logger ?? createLogger();
   const runtime = createRuntimeConfig(options.config);
   const eventsEmitter: EventsEmitter = createEventsEmitter();
+  runtime.onChange(() => eventsEmitter.emit({ type: 'config-changed' }));
   const keyMaterial = await createKeyMaterial(options.config.signingKey);
+  const jwksDocument = buildJwks(keyMaterial);
   const codes = createCodeStore({
     ttlMs: 60_000,
     refreshTtlMs: options.config.refreshTokenTtlSeconds * 1_000,
   });
   const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
 
-  const rawApp = Fastify({ loggerInstance: logger });
-  // Cast to the default FastifyInstance type so that register helpers typed
-  // against FastifyBaseLogger (the Fastify default) accept this instance.
-  const app = rawApp as unknown as FastifyInstance;
+  const app = Fastify({ loggerInstance: logger });
 
   // Permissive CORS: dev-oidc is a development tool; any localhost origin
   // (Console dev servers, test harnesses, etc.) needs to fetch the discovery
@@ -62,11 +62,26 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   await app.register(formbody);
 
   app.get('/.well-known/openid-configuration', async () => {
-    return buildDiscoveryDocument({ issuer: runtime.get().issuer });
+    const cfg = runtime.get();
+    const hasSecretClient = cfg.clients.some((c) => c.clientSecret !== undefined);
+    const authMethods: ('none' | 'client_secret_post' | 'client_secret_basic')[] = hasSecretClient
+      ? ['none', 'client_secret_post', 'client_secret_basic']
+      : ['none'];
+    return buildDiscoveryDocument({
+      issuer: cfg.issuer,
+      signingAlg: keyMaterial.alg,
+      authMethods,
+    });
   });
 
-  app.get('/.well-known/jwks.json', async () => {
-    return buildJwks(keyMaterial);
+  app.get('/.well-known/jwks.json', async () => jwksDocument);
+
+  app.get('/', async (_request, reply) => {
+    const adminEnabled = Boolean(options.configFilePath);
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .send(renderIndexPage({ config: runtime.get(), adminEnabled }));
   });
 
   registerAuthorize(app, { runtime, pending });
@@ -87,7 +102,6 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     watcher = await watchConfig(options.configFilePath, {
       onReload: (config) => {
         runtime.set(config);
-        eventsEmitter.emit({ type: 'config-changed' });
         logger.info({ issuer: config.issuer }, 'config reloaded');
       },
       onError: (err) => logger.warn({ err }, 'config reload failed; keeping previous config'),

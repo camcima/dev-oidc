@@ -1,6 +1,6 @@
 // Static stylesheet — no runtime interpolation.
 // The accent colour is injected via the CSS custom property --accent,
-// which is set as an inline style on <html> in page.tsx.
+// which is set as an inline style on <html> in page.ts.
 export const STATIC_STYLES = `
   body {
     font-family: system-ui, -apple-system, sans-serif;

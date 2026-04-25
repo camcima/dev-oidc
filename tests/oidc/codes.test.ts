@@ -3,7 +3,7 @@ import { createCodeStore } from '@/oidc/codes.js';
 import { createPendingAuthStore } from '@/oidc/pending.js';
 
 describe('CodeStore (authorization codes)', () => {
-  it('issues a code consumable exactly once', () => {
+  it('issues a code consumable exactly once and round-trips scope', () => {
     const store = createCodeStore({ ttlMs: 60_000 });
     const code = store.issue({
       clientId: 'c1',
@@ -11,10 +11,12 @@ describe('CodeStore (authorization codes)', () => {
       codeChallenge: 'xyz',
       nonce: 'n1',
       redirectUri: 'http://localhost/cb',
+      scope: 'openid profile custom_scope',
     });
 
     const first = store.consume(code);
     expect(first?.profileId).toBe('alice');
+    expect(first?.scope).toBe('openid profile custom_scope');
 
     const second = store.consume(code);
     expect(second).toBeNull();
@@ -29,6 +31,7 @@ describe('CodeStore (authorization codes)', () => {
       codeChallenge: 'xyz',
       nonce: 'n1',
       redirectUri: 'http://localhost/cb',
+      scope: 'openid',
     });
 
     vi.advanceTimersByTime(1_500);
@@ -38,25 +41,39 @@ describe('CodeStore (authorization codes)', () => {
 });
 
 describe('CodeStore (refresh tokens)', () => {
-  it('issues and validates a refresh token', () => {
+  it('issues and validates a refresh token with scope round-trip', () => {
     const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
-    const token = store.issueRefresh({ clientId: 'c1', profileId: 'alice' });
+    const token = store.issueRefresh({
+      clientId: 'c1',
+      profileId: 'alice',
+      scope: 'openid profile',
+    });
 
-    expect(store.consumeRefresh(token)?.profileId).toBe('alice');
+    const consumed = store.consumeRefresh(token);
+    expect(consumed?.profileId).toBe('alice');
+    expect(consumed?.scope).toBe('openid profile');
   });
 
-  it('refresh token stays valid within its TTL (not single-use)', () => {
+  it('rotates: a refresh token is single-use; second consumption returns null', () => {
     const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
-    const token = store.issueRefresh({ clientId: 'c1', profileId: 'alice' });
+    const token = store.issueRefresh({
+      clientId: 'c1',
+      profileId: 'alice',
+      scope: 'openid',
+    });
 
     expect(store.consumeRefresh(token)?.profileId).toBe('alice');
-    expect(store.consumeRefresh(token)?.profileId).toBe('alice');
+    expect(store.consumeRefresh(token)).toBeNull();
   });
 
   it('refresh token expires after TTL', () => {
     vi.useFakeTimers();
     const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 1_000 });
-    const token = store.issueRefresh({ clientId: 'c1', profileId: 'alice' });
+    const token = store.issueRefresh({
+      clientId: 'c1',
+      profileId: 'alice',
+      scope: 'openid',
+    });
     vi.advanceTimersByTime(1_500);
     expect(store.consumeRefresh(token)).toBeNull();
     vi.useRealTimers();

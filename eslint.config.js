@@ -6,7 +6,7 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}', 'tests/**/*.{ts,tsx}'],
+    files: ['src/**/*.ts', 'tests/**/*.ts'],
     languageOptions: {
       parserOptions: {
         project: './tsconfig.json',
@@ -22,7 +22,7 @@ export default [
     },
   },
   {
-    files: ['tests/**/*.{ts,tsx}'],
+    files: ['tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
     },

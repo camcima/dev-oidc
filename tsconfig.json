@@ -6,7 +6,6 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "jsx": "react-jsx",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2023",

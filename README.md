@@ -1,23 +1,36 @@
-# dev-oidc
+<div align="center">
+
+<picture>
+  <img alt="dev-oidc" src="assets/logo.svg" width="520">
+</picture>
+
+<br>
+
+[![CI](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/camcima/dev-oidc/graph/badge.svg)](https://codecov.io/gh/camcima/dev-oidc)
+[![npm version](https://img.shields.io/npm/v/dev-oidc)](https://www.npmjs.com/package/dev-oidc)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7%2B-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
+
+</div>
 
 A minimal, config-driven OIDC provider for local development.
-
-**Status:** Pre-release. npm publishing is automated locally with release-it.
-
-[![CI](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml/badge.svg)](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/dev-oidc.svg)](https://www.npmjs.com/package/dev-oidc)
-[![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 ## Why
 
 When you build an app that integrates with an OIDC provider (Azure AD / Entra, Auth0, Keycloak, Okta), local iteration is painful: you either bypass auth in dev (drift between dev and prod) or stand up a full IdP (slow). `dev-oidc` sits where the real IdP would — your app runs its real auth code path (redirect, token exchange, JWT verify, refresh) against a mock that you configure via a JSON file.
 
 - **Full auth-code + PKCE** flow with redirect + login page + token exchange.
-- **Refresh tokens** supported.
+- **Refresh tokens** with single-use rotation — each `/token` response carries a fresh `refresh_token`.
 - **Profile tiles** on the login page — pick a user with one click, no password.
 - **Hot reload** of the config file — edit the JSON on disk or from another tool, no restart.
 - **Admin UI** at `/admin` for profile CRUD.
 - **Persistent signing keys** (optional) so JWTs survive server restarts.
+- **RS256 and ES256** signing algorithms, configurable per deployment.
+- **Optional `clientSecret`** — public clients require no secret; confidential clients can use `client_secret_post` or `client_secret_basic`.
+- **End-to-end scope propagation** — `scope` is reflected in the token response and as a claim in the access token.
+- **Root landing page** at `GET /` listing discovery, JWKS, and (when admin is enabled) the admin link.
 - **Permissive CORS** for browser apps running on `localhost:*`.
 - **OIDC-conformant enough** for `oidc-client-ts`, MSAL, and standard JWT libraries to work against it.
 
@@ -143,13 +156,14 @@ Every field in `dev-oidc.config.json`:
   "host": "127.0.0.1", // Default 127.0.0.1. Use 0.0.0.0 in containers.
   "signingKey": {
     "kid": "dev-key-1", // Required. Key ID surfaced in JWKS + JWT header.
-    "alg": "RS256", // Default "RS256". Only RS256 supported today.
+    "alg": "RS256", // Default "RS256". Also supports "ES256" — see Signing algorithm below.
     "source": "generate", // Default "generate" (ephemeral) or "file:<path>" (persistent).
   },
   "clients": [
     // Required. One or more registered clients.
     {
       "clientId": "my-app", // What your app sends as `client_id`.
+      "clientSecret": "s3cr3t", // Optional. Omit for public clients (no secret required).
       "redirectUris": [
         // Exact-match allowlist.
         "http://localhost:5173/auth/callback",
@@ -224,21 +238,72 @@ Rotate the key by either changing the `kid` (dev-oidc will refuse to load a file
 
 Everything in `profile.claims` is merged into the issued JWT verbatim, with these reserved claim names protected from override: `sub`, `name`, `email`, `iat`, `exp`, `iss`, `aud`, `nonce`.
 
+### Confidential clients
+
+When a client entry includes `clientSecret`, dev-oidc requires the secret at the `/token` endpoint. Public clients (no `clientSecret`) continue to work without any secret, as before.
+
+Two auth methods are accepted:
+
+- **`client_secret_post`** — include `client_secret` as a form field in the `POST /token` body.
+- **`client_secret_basic`** — HTTP Basic auth: `Authorization: Basic <base64(clientId:clientSecret)>`.
+
+When the secret is missing or wrong, dev-oidc returns `401` with `WWW-Authenticate: Basic realm="dev-oidc"`.
+
+Example config entry:
+
+```json
+{
+  "clients": [
+    {
+      "clientId": "confidential-app",
+      "clientSecret": "s3cr3t-value",
+      "redirectUris": ["http://localhost:5173/auth/callback"],
+      "audience": "my-api"
+    }
+  ]
+}
+```
+
+### Signing algorithm
+
+The `signingKey.alg` field accepts `"RS256"` (default) or `"ES256"`:
+
+```json
+{
+  "signingKey": { "kid": "k1", "alg": "ES256", "source": "generate" }
+}
+```
+
+File-backed key files written with `RS256` load unchanged when `alg` is `"RS256"`. ES256 key files written by this version are not loadable by alpha.2 — only forward-compatible within the same algorithm.
+
+### Scope propagation
+
+The `scope` parameter is propagated end-to-end:
+
+- `/authorize` rejects requests whose `scope` does not include `openid` with `400 invalid_scope`.
+- The `/token` response `scope` field reflects the scope the client actually requested, not a hardcoded string.
+- Access tokens carry a `scope` claim with the same value.
+
+### Refresh token rotation
+
+dev-oidc rotates refresh tokens on every use. The consumed token becomes invalid as soon as `/token` returns the new one. Apps that previously cached a single refresh token must capture and store the new `refresh_token` from each `/token` response.
+
 ---
 
 ## Endpoints
 
-| Path                                    | Purpose                         |
-| --------------------------------------- | ------------------------------- |
-| `GET /.well-known/openid-configuration` | Discovery doc.                  |
-| `GET /.well-known/jwks.json`            | Public keys.                    |
-| `GET /authorize`                        | Renders the login page (tiles). |
-| `POST /authorize/complete`              | Issues an auth code.            |
-| `POST /token`                           | Code exchange + refresh.        |
-| `GET` / `POST /logout`                  | Ends the session.               |
-| `GET /admin`                            | Admin UI (profile CRUD).        |
+| Path                                    | Purpose                                         |
+| --------------------------------------- | ----------------------------------------------- |
+| `GET /`                                 | Landing page: discovery, JWKS, and admin links. |
+| `GET /.well-known/openid-configuration` | Discovery doc.                                  |
+| `GET /.well-known/jwks.json`            | Public keys.                                    |
+| `GET /authorize`                        | Renders the login page (tiles).                 |
+| `POST /authorize/complete`              | Issues an auth code.                            |
+| `POST /token`                           | Code exchange + refresh.                        |
+| `GET` / `POST /logout`                  | Ends the session.                               |
+| `GET /admin`                            | Admin UI (profile CRUD).                        |
 
-All OIDC flows require **PKCE with S256**. No client secrets. No implicit flow.
+All OIDC flows require **PKCE with S256**. No implicit flow. Client secrets are optional — see [Confidential clients](#confidential-clients) below.
 
 CORS is permissive by default (`Access-Control-Allow-Origin` reflects the request's `Origin`) — browser-based OIDC clients can fetch the discovery doc, JWKS, and token endpoint without additional config.
 
@@ -264,9 +329,10 @@ From the login page itself, a small "Manage profiles →" link jumps to `/admin`
 
 - **Development only.** Not suitable for production use under any circumstances.
 - **Single tenant.** One issuer per instance.
-- **No client authentication** at the token endpoint — trust is at the network layer.
+- **In-memory session state.** Authorization codes (60 s TTL) and refresh tokens (8 h default) are held in memory. A server restart invalidates all active codes and refresh tokens. Persistent session storage is intentionally out of scope. Signing keys can be persisted across restarts via `signingKey.source: "file:<path>"` (see [Signing-key persistence](#signing-key-persistence)).
 - **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
 - **No authentication on `/admin`.**
+- **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
 
 ---
 

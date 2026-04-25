@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { createCodeStore } from '@/oidc/codes.js';
+import type { CodeStore } from '@/oidc/codes.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { registerToken } from '@/oidc/token.js';
 
@@ -63,6 +64,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256(verifier),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid profile custom_scope',
     });
 
     const res = await app.inject({
@@ -92,6 +94,8 @@ describe('POST /token (authorization_code)', () => {
     expect(payload.sub).toBe('alice');
     expect(payload.email).toBe('a@x.com');
     expect((payload as Record<string, unknown>).role).toBe('admin');
+    expect((payload as Record<string, unknown>).scope).toBe('openid profile custom_scope');
+    expect((res.json() as { scope: string }).scope).toBe('openid profile custom_scope');
     await app.close();
   });
 
@@ -103,6 +107,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256('correct-verifier'),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
     });
 
     const res = await app.inject({
@@ -132,6 +137,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256(verifier),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
     });
 
     const payload = new URLSearchParams({
@@ -165,7 +171,11 @@ describe('POST /token (authorization_code)', () => {
 describe('POST /token (refresh_token)', () => {
   it('exchanges a valid refresh token for a new access token', async () => {
     const { app, codes, keyMaterial } = await buildApp();
-    const refreshToken = codes.issueRefresh({ clientId: 'my-app', profileId: 'alice' });
+    const refreshToken = codes.issueRefresh({
+      clientId: 'my-app',
+      profileId: 'alice',
+      scope: 'openid profile',
+    });
 
     const res = await app.inject({
       method: 'POST',
@@ -186,6 +196,44 @@ describe('POST /token (refresh_token)', () => {
       { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
+    expect((payload as Record<string, unknown>).scope).toBe('openid profile');
+    await app.close();
+  });
+
+  it('rotates the refresh token: the old one is rejected after first use', async () => {
+    const { app, codes } = await buildApp();
+    const oldToken = codes.issueRefresh({
+      clientId: 'my-app',
+      profileId: 'alice',
+      scope: 'openid profile',
+    });
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: oldToken,
+        client_id: 'my-app',
+      }).toString(),
+    });
+    expect(first.statusCode).toBe(200);
+    const newToken = (first.json() as { refresh_token: string }).refresh_token;
+    expect(newToken).not.toBe(oldToken);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: oldToken,
+        client_id: 'my-app',
+      }).toString(),
+    });
+    expect(second.statusCode).toBe(400);
+    expect(second.json().error).toBe('invalid_grant');
     await app.close();
   });
 
@@ -222,6 +270,149 @@ describe('POST /token (unsupported grants)', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('unsupported_grant_type');
+    await app.close();
+  });
+});
+
+function buildConfigWithSecret(): Config {
+  return {
+    issuer: 'http://localhost:8095',
+    port: 8095,
+    host: '127.0.0.1',
+    signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
+    clients: [
+      {
+        clientId: 'confidential-app',
+        clientSecret: 's3cr3t-value',
+        redirectUris: ['http://localhost:5173/auth/callback'],
+        postLogoutRedirectUris: [],
+        audience: 'my-api',
+      },
+    ],
+    subjectClaim: 'sub',
+    tokenTtlSeconds: 900,
+    refreshTokenTtlSeconds: 28800,
+    branding: { title: 'T', accentColor: '#000', logoUrl: null },
+    profiles: [
+      {
+        id: 'alice',
+        displayName: 'Alice',
+        email: 'a@x.com',
+        avatar: null,
+        claims: {},
+      },
+    ],
+  };
+}
+
+async function buildAppWithSecret() {
+  const runtime = createRuntimeConfig(buildConfigWithSecret());
+  const codes = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
+  const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
+  const app = Fastify();
+  await app.register(formbody);
+  registerToken(app, { runtime, codes, keyMaterial });
+  return { app, codes };
+}
+
+describe('POST /token (client_secret enforcement)', () => {
+  function payload(extra: Record<string, string>): string {
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    return new URLSearchParams({
+      grant_type: 'authorization_code',
+      code_verifier: verifier,
+      client_id: 'confidential-app',
+      redirect_uri: 'http://localhost:5173/auth/callback',
+      ...extra,
+    }).toString();
+  }
+
+  function issue(codes: CodeStore): string {
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    return codes.issue({
+      clientId: 'confidential-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
+    });
+  }
+
+  it('returns 401 invalid_client when secret is missing', async () => {
+    const { app, codes } = await buildAppWithSecret();
+    const code = issue(codes);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: payload({ code }),
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe('invalid_client');
+    expect(res.headers['www-authenticate']).toMatch(/Basic/i);
+    await app.close();
+  });
+
+  it('returns 401 invalid_client when secret is wrong', async () => {
+    const { app, codes } = await buildAppWithSecret();
+    const code = issue(codes);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: payload({ code, client_secret: 'wrong-secret' }),
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe('invalid_client');
+    await app.close();
+  });
+
+  it('accepts a correct secret via client_secret_post', async () => {
+    const { app, codes } = await buildAppWithSecret();
+    const code = issue(codes);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: payload({ code, client_secret: 's3cr3t-value' }),
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('accepts a correct secret via client_secret_basic (HTTP Basic)', async () => {
+    const { app, codes } = await buildAppWithSecret();
+    const code = issue(codes);
+    const basic = Buffer.from('confidential-app:s3cr3t-value').toString('base64');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basic}`,
+      },
+      payload: payload({ code }),
+    });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('returns 400 invalid_request when basic and form values disagree', async () => {
+    const { app, codes } = await buildAppWithSecret();
+    const code = issue(codes);
+    const basic = Buffer.from('confidential-app:s3cr3t-value').toString('base64');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basic}`,
+      },
+      payload: payload({ code, client_secret: 'different-secret' }),
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_request');
     await app.close();
   });
 });

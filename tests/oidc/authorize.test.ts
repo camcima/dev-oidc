@@ -114,4 +114,27 @@ describe('GET /authorize', () => {
     expect(rec?.state).toBe('s1');
     await app.close();
   });
+
+  it('returns 400 invalid_scope when the requested scope does not include openid', async () => {
+    const { app } = await buildApp();
+    const params = new URLSearchParams(validParams);
+    params.set('scope', 'profile email');
+    const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_scope');
+    await app.close();
+  });
+
+  it('accepts a scope that includes openid plus custom values', async () => {
+    const { app, pending } = await buildApp();
+    const params = new URLSearchParams(validParams);
+    params.set('scope', 'openid custom_scope');
+    const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
+    expect(res.statusCode).toBe(200);
+    const match = res.payload.match(/name="pendingAuthId"[^>]*value="([^"]+)"/);
+    expect(match).not.toBeNull();
+    const rec = pending.consume(match![1]!);
+    expect(rec?.scope).toBe('openid custom_scope');
+    await app.close();
+  });
 });
