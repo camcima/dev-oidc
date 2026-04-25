@@ -63,6 +63,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256(verifier),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid profile custom_scope',
     });
 
     const res = await app.inject({
@@ -92,6 +93,8 @@ describe('POST /token (authorization_code)', () => {
     expect(payload.sub).toBe('alice');
     expect(payload.email).toBe('a@x.com');
     expect((payload as Record<string, unknown>).role).toBe('admin');
+    expect((payload as Record<string, unknown>).scope).toBe('openid profile custom_scope');
+    expect((res.json() as { scope: string }).scope).toBe('openid profile custom_scope');
     await app.close();
   });
 
@@ -103,6 +106,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256('correct-verifier'),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
     });
 
     const res = await app.inject({
@@ -132,6 +136,7 @@ describe('POST /token (authorization_code)', () => {
       codeChallenge: s256(verifier),
       nonce: 'n1',
       redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
     });
 
     const payload = new URLSearchParams({
@@ -165,7 +170,11 @@ describe('POST /token (authorization_code)', () => {
 describe('POST /token (refresh_token)', () => {
   it('exchanges a valid refresh token for a new access token', async () => {
     const { app, codes, keyMaterial } = await buildApp();
-    const refreshToken = codes.issueRefresh({ clientId: 'my-app', profileId: 'alice' });
+    const refreshToken = codes.issueRefresh({
+      clientId: 'my-app',
+      profileId: 'alice',
+      scope: 'openid profile',
+    });
 
     const res = await app.inject({
       method: 'POST',
@@ -186,6 +195,7 @@ describe('POST /token (refresh_token)', () => {
       { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
+    expect((payload as Record<string, unknown>).scope).toBe('openid profile');
     await app.close();
   });
 

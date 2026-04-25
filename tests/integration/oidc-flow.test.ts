@@ -84,7 +84,7 @@ describe('integration: full auth-code + PKCE flow', () => {
         }).toString(),
       });
       expect(tokenRes.statusCode).toBe(200);
-      const tokens = tokenRes.json() as { access_token: string };
+      const tokens = tokenRes.json() as { access_token: string; scope: string };
 
       const jwksRes = await server.app.inject({
         method: 'GET',
@@ -100,6 +100,8 @@ describe('integration: full auth-code + PKCE flow', () => {
       expect(payload.sub).toBe('bob');
       expect(payload.email).toBe('bob@example.com');
       expect((payload as Record<string, unknown>).role).toBe('manager');
+      expect(tokens.scope).toContain('openid');
+      expect((payload as Record<string, unknown>).scope).toBe('openid profile email');
     } finally {
       await server.close();
     }

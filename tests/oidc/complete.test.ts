@@ -130,4 +130,30 @@ describe('POST /authorize/complete', () => {
     expect(res.statusCode).toBe(400);
     await app.close();
   });
+
+  it('forwards the pending-record scope into the issued code', async () => {
+    const { app, codes, pending } = await buildApp();
+    const pendingId = pending.create({
+      clientId: 'my-app',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      codeChallenge: 'cc',
+      codeChallengeMethod: 'S256',
+      nonce: 'n1',
+      state: 's1',
+      scope: 'openid email custom_scope',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/authorize/complete',
+      payload: { pendingAuthId: pendingId, profileId: 'alice' },
+    });
+    expect(res.statusCode).toBe(302);
+    const location = res.headers.location as string;
+    const codeMatch = /[?&]code=([^&]+)/.exec(location);
+    expect(codeMatch).not.toBeNull();
+    const record = codes.consume(codeMatch![1]!);
+    expect(record?.scope).toBe('openid email custom_scope');
+    await app.close();
+  });
 });

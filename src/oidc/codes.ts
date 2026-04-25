@@ -6,11 +6,13 @@ export interface CodeRecord {
   codeChallenge: string;
   nonce: string;
   redirectUri: string;
+  scope: string;
 }
 
 export interface RefreshRecord {
   clientId: string;
   profileId: string;
+  scope: string;
 }
 
 export interface CodeStoreOptions {

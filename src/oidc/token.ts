@@ -84,7 +84,7 @@ async function handleCodeGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(deps, profile, record.clientId, record.nonce, reply);
+  return issueTokenSet(deps, profile, record.clientId, record.nonce, record.scope, reply);
 }
 
 async function handleRefreshGrant(
@@ -109,7 +109,7 @@ async function handleRefreshGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(deps, profile, record.clientId, '', reply);
+  return issueTokenSet(deps, profile, record.clientId, '', record.scope, reply);
 }
 
 async function issueTokenSet(
@@ -117,6 +117,7 @@ async function issueTokenSet(
   profile: Profile,
   clientId: string,
   nonce: string,
+  scope: string,
   reply: FastifyReply,
 ): Promise<unknown> {
   const config = deps.runtime.get();
@@ -126,7 +127,7 @@ async function issueTokenSet(
   }
   const baseClaims = buildClaims({ profile, subjectClaim: config.subjectClaim });
 
-  const accessToken = await new jose.SignJWT(baseClaims)
+  const accessToken = await new jose.SignJWT({ ...baseClaims, scope })
     .setProtectedHeader({ alg: 'RS256', kid: deps.keyMaterial.kid, typ: 'JWT' })
     .setIssuer(config.issuer)
     .setAudience(client.audience)
@@ -144,7 +145,7 @@ async function issueTokenSet(
     .setExpirationTime(`${config.tokenTtlSeconds}s`)
     .sign(deps.keyMaterial.privateKey);
 
-  const refreshToken = deps.codes.issueRefresh({ clientId, profileId: profile.id });
+  const refreshToken = deps.codes.issueRefresh({ clientId, profileId: profile.id, scope });
 
   return reply.code(200).send({
     access_token: accessToken,
@@ -152,6 +153,6 @@ async function issueTokenSet(
     expires_in: config.tokenTtlSeconds,
     refresh_token: refreshToken,
     id_token: idToken,
-    scope: 'openid profile email',
+    scope,
   });
 }
