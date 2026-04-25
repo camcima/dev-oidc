@@ -60,7 +60,7 @@ The same code path runs in production — only the URLs change.
 docker run --rm -p 8080:8080 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:latest
+  camcima2/dev-oidc:latest
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -76,7 +76,7 @@ The image listens on port `8080` inside the container; map it to whatever you wa
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:latest
+    image: camcima2/dev-oidc:latest
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
