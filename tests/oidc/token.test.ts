@@ -9,6 +9,18 @@ import { createCodeStore } from '@/oidc/codes.js';
 import type { CodeStore } from '@/oidc/codes.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { registerToken } from '@/oidc/token.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
+
+function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantState {
+  return {
+    slug: '(legacy)',
+    configPath: '/dev/null',
+    status: 'active',
+    issuer: 'http://localhost:8095',
+    watcher: null,
+    ...overrides,
+  } as ActiveTenantState;
+}
 
 function buildConfig(): Config {
   return {
@@ -41,12 +53,14 @@ function buildConfig(): Config {
 }
 
 async function buildApp() {
-  const runtime = createRuntimeConfig(buildConfig());
+  const config = buildConfig();
+  const runtime = createRuntimeConfig(config);
   const codes = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
   const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
   const app = Fastify();
   await app.register(formbody);
-  registerToken(app, { runtime, codes, keyMaterial });
+  const tenant = buildActiveTenant({ config, runtime, codes, keyMaterial });
+  registerToken(app, { getTenant: () => tenant });
   return { app, runtime, codes, keyMaterial };
 }
 
@@ -306,12 +320,14 @@ function buildConfigWithSecret(): Config {
 }
 
 async function buildAppWithSecret() {
-  const runtime = createRuntimeConfig(buildConfigWithSecret());
+  const config = buildConfigWithSecret();
+  const runtime = createRuntimeConfig(config);
   const codes = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
   const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
   const app = Fastify();
   await app.register(formbody);
-  registerToken(app, { runtime, codes, keyMaterial });
+  const tenant = buildActiveTenant({ config, runtime, codes, keyMaterial });
+  registerToken(app, { getTenant: () => tenant });
   return { app, codes };
 }
 
