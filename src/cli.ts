@@ -36,6 +36,7 @@ async function main(): Promise<void> {
   const server = await createDevOidcServer({
     config,
     configFilePath: values.config,
+    issuer: config.issuer, // transitional; Phase 1 replaces with computed value
     logger,
   });
 

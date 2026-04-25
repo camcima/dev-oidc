@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-export type AdminEvent = { type: 'config-changed' };
+export type AdminEvent = { type: 'config-changed'; slug: string };
 
 export interface EventsEmitter {
   subscribe: (listener: (event: AdminEvent) => void) => () => void;

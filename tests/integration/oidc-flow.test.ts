@@ -40,7 +40,7 @@ const config: Config = {
 
 describe('integration: full auth-code + PKCE flow', () => {
   it('mints a verifiable access token end-to-end', async () => {
-    const server = await createDevOidcServer({ config });
+    const server = await createDevOidcServer({ config, issuer: config.issuer });
     try {
       const { verifier, challenge } = pkcePair();
 
@@ -108,7 +108,7 @@ describe('integration: full auth-code + PKCE flow', () => {
   });
 
   it('discovery document links to all endpoints', async () => {
-    const server = await createDevOidcServer({ config });
+    const server = await createDevOidcServer({ config, issuer: config.issuer });
     try {
       const res = await server.app.inject({
         method: 'GET',

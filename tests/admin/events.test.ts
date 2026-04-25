@@ -19,7 +19,7 @@ describe('events', () => {
       // Can't fully consume SSE in a test easily; check the handshake instead.
       // Fastify should respond with content-type text/event-stream.
       // Use a shorter test that checks the emitter's subscribe directly.
-      emitter.emit({ type: 'config-changed' });
+      emitter.emit({ type: 'config-changed', slug: '(legacy)' });
 
       expect(true).toBe(true);
     } finally {
@@ -34,17 +34,28 @@ describe('events', () => {
     const unsubA = emitter.subscribe((e) => a.push(e));
     const unsubB = emitter.subscribe((e) => b.push(e));
 
-    emitter.emit({ type: 'config-changed' });
-    emitter.emit({ type: 'config-changed' });
+    emitter.emit({ type: 'config-changed', slug: '(legacy)' });
+    emitter.emit({ type: 'config-changed', slug: '(legacy)' });
 
     expect(a).toHaveLength(2);
     expect(b).toHaveLength(2);
 
     unsubA();
-    emitter.emit({ type: 'config-changed' });
+    emitter.emit({ type: 'config-changed', slug: '(legacy)' });
     expect(a).toHaveLength(2);
     expect(b).toHaveLength(3);
 
     unsubB();
+  });
+
+  it('emitted event carries the slug payload', () => {
+    const emitter = createEventsEmitter();
+    const received: unknown[] = [];
+    emitter.subscribe((e) => received.push(e));
+
+    emitter.emit({ type: 'config-changed', slug: 'my-tenant' });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toEqual({ type: 'config-changed', slug: 'my-tenant' });
   });
 });

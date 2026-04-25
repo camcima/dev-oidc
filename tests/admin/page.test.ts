@@ -35,7 +35,7 @@ function config(): Config {
 
 describe('renderAdminPage', () => {
   it('renders a full HTML doc with the profiles table', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     expect(html).toContain('<!doctype html>');
     expect(html).toContain('Admin');
     expect(html).toContain('alice');
@@ -45,26 +45,26 @@ describe('renderAdminPage', () => {
   });
 
   it('embeds a raw-config JSON view', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     expect(html).toContain('"issuer": "http://localhost:8095"');
   });
 
   it('escapes HTML-special characters in profile fields', () => {
     const cfg = config();
     cfg.profiles[0]!.displayName = '<script>alert(1)</script>';
-    const html = renderAdminPage(cfg);
+    const html = renderAdminPage({ config: cfg, slug: '(legacy)' });
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
   it('includes an inline script that subscribes to /admin/events', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     expect(html).toContain('/admin/events');
     expect(html).toContain('EventSource');
   });
 
   it('renders Edit and Delete buttons side-by-side in a flex container (no details/summary)', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     // Actions cell uses a flex container, NOT a native disclosure widget.
     expect(html).toContain('class="actions"');
     expect(html).not.toMatch(/<details\b/);
@@ -72,7 +72,7 @@ describe('renderAdminPage', () => {
   });
 
   it('renders a modal <dialog> per profile keyed by id', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     expect(html).toMatch(/<dialog id="edit-dialog-alice"/);
     expect(html).toMatch(/<dialog id="edit-dialog-bob"/);
     // Edit button triggers the dialog via data attribute.
@@ -81,13 +81,13 @@ describe('renderAdminPage', () => {
   });
 
   it('each edit dialog includes a Cancel button that closes the dialog', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     expect(html).toContain('data-dialog-close');
     expect(html).toContain('Cancel');
   });
 
   it('Add profile lives in its own modal, opened by a button next to the Profiles heading', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     // Header-row button opens the add dialog — not an inline form at the bottom.
     expect(html).toContain('data-open-dialog="add-dialog"');
     expect(html).toMatch(/<dialog id="add-dialog"/);
@@ -97,7 +97,7 @@ describe('renderAdminPage', () => {
   });
 
   it('every profile form (edit and add) has a Cancel button; all forms are inside a dialog', () => {
-    const html = renderAdminPage(config());
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     // 2 edit dialogs + 1 add dialog = 3 forms, each with Cancel.
     const cancelCount = (html.match(/>Cancel</g) ?? []).length;
     expect(cancelCount).toBe(3);

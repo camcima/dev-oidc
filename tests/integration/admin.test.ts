@@ -35,7 +35,11 @@ describe('admin integration', () => {
     seed(file);
     const config: Config = JSON.parse(readFileSync(file, 'utf8'));
 
-    const server = await createDevOidcServer({ config, configFilePath: file });
+    const server = await createDevOidcServer({
+      config,
+      configFilePath: file,
+      issuer: config.issuer,
+    });
     try {
       const res = await server.app.inject({ method: 'GET', url: '/admin' });
       expect(res.statusCode).toBe(200);
@@ -52,7 +56,11 @@ describe('admin integration', () => {
     seed(file);
     const config: Config = JSON.parse(readFileSync(file, 'utf8'));
 
-    const server = await createDevOidcServer({ config, configFilePath: file });
+    const server = await createDevOidcServer({
+      config,
+      configFilePath: file,
+      issuer: config.issuer,
+    });
     try {
       const res = await server.app.inject({
         method: 'POST',
@@ -68,7 +76,7 @@ describe('admin integration', () => {
       expect(res.statusCode).toBe(201);
       const onDisk: Config = JSON.parse(readFileSync(file, 'utf8'));
       expect(onDisk.profiles.map((p) => p.id)).toEqual(['alice', 'bob']);
-      expect(server.runtime.get().profiles.map((p) => p.id)).toEqual(['alice', 'bob']);
+      expect(server.tenant.runtime.get().profiles.map((p) => p.id)).toEqual(['alice', 'bob']);
     } finally {
       await server.close();
     }

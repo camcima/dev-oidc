@@ -28,7 +28,7 @@ const config: Config = {
 
 describe('contract: tokens verify via real HTTP JWKS fetch', () => {
   it('mints an oid-bearing token that verifies against remote JWKS', async () => {
-    const server = await createDevOidcServer({ config });
+    const server = await createDevOidcServer({ config, issuer: config.issuer });
     const baseUrl = await server.app.listen({ port: 0, host: '127.0.0.1' });
 
     try {

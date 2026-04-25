@@ -184,7 +184,15 @@ function profileRow(profile: Profile): Html {
   </tr>`;
 }
 
-export function renderAdminPage(config: Config): string {
+export interface RenderAdminPageInput {
+  config: Config;
+  slug: string;
+}
+
+export function renderAdminPage(input: RenderAdminPageInput): string {
+  // slug currently unused; Phase 5 will wire slug-aware API URLs
+  void input.slug;
+  const config = input.config;
   // The raw-config dump sits inside a <div> element body. Quotes are not
   // dangerous in element-text context, only in attribute values. Standard
   // escape would convert " to &quot;, which is correct but visually noisy

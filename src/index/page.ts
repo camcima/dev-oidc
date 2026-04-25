@@ -1,5 +1,5 @@
-import type { Config } from '@/config/schema.js';
 import { Html, html, renderToString } from '@/shared/html.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 const STYLES = `
   body {
@@ -18,27 +18,27 @@ const STYLES = `
 `.trim();
 
 export interface RenderIndexPageInput {
-  config: Config;
+  tenant: ActiveTenantState;
   adminEnabled: boolean;
 }
 
 export function renderIndexPage(input: RenderIndexPageInput): string {
-  const { config, adminEnabled } = input;
+  const { tenant, adminEnabled } = input;
   const adminLink = adminEnabled ? html`<li><a href="/admin">Admin UI</a></li>` : '';
 
   const doc = html`<!doctype html>
-    <html lang="en" style="--accent: ${config.branding.accentColor}">
+    <html lang="en" style="--accent: ${tenant.config.branding.accentColor}">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${config.branding.title}</title>
+        <title>${tenant.config.branding.title}</title>
         <style>
           ${new Html(STYLES)}
         </style>
       </head>
       <body>
         <h1>dev-oidc</h1>
-        <p>Local OIDC provider running at <code>${config.issuer}</code>.</p>
+        <p>Local OIDC provider running at <code>${tenant.issuer}</code>.</p>
         <h2>Endpoints</h2>
         <ul>
           <li><a href="/.well-known/openid-configuration">Discovery document</a></li>
