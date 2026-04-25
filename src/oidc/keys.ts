@@ -13,15 +13,14 @@ export interface KeyMaterial {
 }
 
 export async function createKeyMaterial(config: SigningKey): Promise<KeyMaterial> {
-  const alg: SigningAlg = config.alg;
   if (config.source === 'generate') {
-    return generateEphemeralKey(config.kid, alg);
+    return generateEphemeralKey(config.kid, config.alg);
   }
 
   const filePath = config.source.slice('file:'.length);
-  const existing = await loadKeyFromFile(filePath, config.kid, alg);
+  const existing = await loadKeyFromFile(filePath, config.kid, config.alg);
   if (existing) return existing;
-  const generated = await generateEphemeralKey(config.kid, alg);
+  const generated = await generateEphemeralKey(config.kid, config.alg);
   await saveKeyToFile(filePath, generated);
   return generated;
 }
