@@ -1,12 +1,21 @@
-# dev-oidc
+<div align="center">
+
+<picture>
+  <img alt="dev-oidc" src="assets/logo.svg" width="520">
+</picture>
+
+<br>
+
+[![CI](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/camcima/dev-oidc/graph/badge.svg)](https://codecov.io/gh/camcima/dev-oidc)
+[![npm version](https://img.shields.io/npm/v/dev-oidc)](https://www.npmjs.com/package/dev-oidc)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7%2B-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-22%2B-green.svg)](https://nodejs.org/)
+
+</div>
 
 A minimal, config-driven OIDC provider for local development.
-
-**Status:** Pre-release. npm publishing is automated locally with release-it.
-
-[![CI](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml/badge.svg)](https://github.com/camcima/dev-oidc/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/dev-oidc.svg)](https://www.npmjs.com/package/dev-oidc)
-[![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
 ## Why
 
