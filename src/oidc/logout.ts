@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RuntimeConfig } from '@/config/runtime.js';
+import { renderLogoutPage } from '@/oidc/logout-page.js';
 
 export interface LogoutDeps {
   runtime: RuntimeConfig;
@@ -16,7 +17,10 @@ export function registerLogout(app: FastifyInstance, deps: LogoutDeps): void {
     const config = deps.runtime.get();
 
     if (!requested) {
-      return reply.code(302).header('location', '/').send();
+      return reply
+        .code(200)
+        .type('text/html; charset=utf-8')
+        .send(renderLogoutPage({ branding: config.branding }));
     }
 
     const allowedUri = config.clients
