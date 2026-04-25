@@ -13,6 +13,11 @@ import { registerComplete } from '@/oidc/complete.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { buildDiscoveryDocument } from '@/oidc/discovery.js';
+import { renderHubDashboard, type DashboardTenant } from '@/admin/dashboard.js';
+import { renderAdminPage } from '@/admin/page.js';
+import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
+import { createEventsEmitter, registerEventsRoute } from '@/admin/events.js';
+import { html, renderToString } from '@/shared/html.js';
 
 export interface CreateHubServerOptions {
   hubConfigPath: string;
@@ -117,6 +122,107 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
       registerComplete(scope, { getTenant, pathPrefix: '/:slug' });
       registerToken(scope, { getTenant, pathPrefix: '/:slug' });
       registerLogout(scope, { getTenant, pathPrefix: '/:slug' });
+    },
+    { prefix: '' },
+  );
+
+  // Wire registry events → admin SSE emitter.
+  const eventsEmitter = createEventsEmitter();
+  registry.events.on('profilesChanged', ({ slug }) =>
+    eventsEmitter.emit({ type: 'config-changed', slug }),
+  );
+  registry.events.on('added', ({ slug }) => eventsEmitter.emit({ type: 'config-changed', slug }));
+  registry.events.on('removed', ({ slug }) => eventsEmitter.emit({ type: 'config-changed', slug }));
+
+  // Admin dashboard.
+  app.get('/admin', async (_req, reply) => {
+    const tenants: DashboardTenant[] = registry.list().map((t) => {
+      if (t.status === 'active') {
+        return {
+          slug: t.slug,
+          status: 'active' as const,
+          issuer: t.issuer,
+          configPath: t.configPath,
+          profileCount: t.runtime.get().profiles.length,
+          lastError: null,
+        };
+      }
+      return {
+        slug: t.slug,
+        status: 'error' as const,
+        issuer: null,
+        configPath: t.configPath,
+        profileCount: null,
+        lastError: t.lastError,
+      };
+    });
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .send(renderHubDashboard({ publicUrl, tenants }));
+  });
+
+  // Tenant summary JSON endpoint.
+  app.get('/admin/api/tenants', async () => {
+    return registry.list().map((t) => {
+      if (t.status === 'active') {
+        return {
+          slug: t.slug,
+          status: 'active' as const,
+          issuer: t.issuer,
+          configPath: t.configPath,
+          profileCount: t.runtime.get().profiles.length,
+          lastError: null,
+        };
+      }
+      return {
+        slug: t.slug,
+        status: 'error' as const,
+        issuer: null,
+        configPath: t.configPath,
+        profileCount: null,
+        lastError: t.lastError,
+      };
+    });
+  });
+
+  // SSE events stream.
+  registerEventsRoute(app, { emitter: eventsEmitter });
+
+  // Per-tenant admin page.
+  app.get('/admin/:slug', async (req, reply) => {
+    const slug = (req.params as { slug: string }).slug;
+    const tenant = registry.get(slug);
+    if (!tenant) {
+      return reply.code(404).send({ error: 'not_found' });
+    }
+    if (tenant.status === 'error') {
+      const errorPage = renderToString(
+        html`<!doctype html>
+          <html>
+            <body>
+              <h1>Tenant "${slug}" error</h1>
+              <pre>${tenant.lastError}</pre>
+            </body>
+          </html>`,
+      );
+      return reply.code(503).type('text/html; charset=utf-8').send(errorPage);
+    }
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .send(renderAdminPage({ config: tenant.runtime.get(), slug: tenant.slug }));
+  });
+
+  // Per-tenant profile CRUD under /admin/api/:slug/...
+  await app.register(
+    async (scope) => {
+      scope.addHook('preHandler', tenantPreHandler);
+
+      registerProfilesRoutes(scope, {
+        getTenant: (req) => (req as FastifyRequest & { tenant: ActiveTenantState }).tenant,
+        pathPrefix: '/admin/api/:slug',
+      });
     },
     { prefix: '' },
   );

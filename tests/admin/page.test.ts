@@ -100,4 +100,17 @@ describe('renderAdminPage', () => {
     const cancelCount = (html.match(/>Cancel</g) ?? []).length;
     expect(cancelCount).toBe(3);
   });
+
+  it('uses legacy /admin/api/profiles URLs when slug is "(legacy)"', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toContain('data-api="/admin/api/profiles"');
+    expect(html).toContain('data-api="/admin/api/profiles/alice"');
+  });
+
+  it('uses slug-scoped /admin/api/:slug/profiles URLs when slug is not "(legacy)"', () => {
+    const html = renderAdminPage({ config: config(), slug: 'myapp' });
+    expect(html).toContain('data-api="/admin/api/myapp/profiles"');
+    expect(html).toContain('data-api="/admin/api/myapp/profiles/alice"');
+    expect(html).not.toContain('data-api="/admin/api/profiles"');
+  });
 });

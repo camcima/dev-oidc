@@ -114,11 +114,11 @@ const SAFE_STYLES = new Html(STYLES); // module-level const string literal, neve
 // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 const SAFE_CLIENT_SCRIPT = new Html(CLIENT_SCRIPT); // module-level const string literal, never externally controlled
 
-function profileEditForm(profile: Profile): Html {
+function profileEditForm(profile: Profile, apiBase: string): Html {
   const claimsJson = JSON.stringify(profile.claims, null, 2);
   return html`<form
     class="edit"
-    data-api="/admin/api/profiles/${profile.id}"
+    data-api="${apiBase}/${profile.id}"
     data-method="PUT"
     method="post"
   >
@@ -142,8 +142,8 @@ function profileEditForm(profile: Profile): Html {
   </form>`;
 }
 
-function profileAddForm(): Html {
-  return html`<form class="edit" data-api="/admin/api/profiles" data-method="POST" method="post">
+function profileAddForm(apiBase: string): Html {
+  return html`<form class="edit" data-api="${apiBase}" data-method="POST" method="post">
     <label for="id-new">ID</label>
     <input name="id" id="id-new" value="" required />
     <label for="displayName-new">Display name</label>
@@ -159,7 +159,7 @@ function profileAddForm(): Html {
   </form>`;
 }
 
-function profileRow(profile: Profile): Html {
+function profileRow(profile: Profile, apiBase: string): Html {
   const claimsCount = Object.keys(profile.claims).length;
   return html`<tr>
     <td>${profile.id}</td>
@@ -169,7 +169,7 @@ function profileRow(profile: Profile): Html {
     <td>
       <div class="actions">
         <button type="button" data-edit-dialog="${profile.id}">Edit</button>
-        <form data-api="/admin/api/profiles/${profile.id}" data-method="DELETE" method="post">
+        <form data-api="${apiBase}/${profile.id}" data-method="DELETE" method="post">
           <button type="submit" class="danger">Delete</button>
         </form>
       </div>
@@ -178,7 +178,7 @@ function profileRow(profile: Profile): Html {
           <h3>Edit profile — ${profile.displayName}</h3>
           <button type="button" data-dialog-close aria-label="Close">✕</button>
         </div>
-        ${profileEditForm(profile)}
+        ${profileEditForm(profile, apiBase)}
       </dialog>
     </td>
   </tr>`;
@@ -190,9 +190,9 @@ export interface RenderAdminPageInput {
 }
 
 export function renderAdminPage(input: RenderAdminPageInput): string {
-  // slug currently unused; Phase 5 will wire slug-aware API URLs
-  void input.slug;
   const config = input.config;
+  const apiBase =
+    input.slug === '(legacy)' ? '/admin/api/profiles' : `/admin/api/${input.slug}/profiles`;
   // The raw-config dump sits inside a <div> element body. Quotes are not
   // dangerous in element-text context, only in attribute values. Standard
   // escape would convert " to &quot;, which is correct but visually noisy
@@ -233,7 +233,7 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
             </tr>
           </thead>
           <tbody>
-            ${config.profiles.map(profileRow)}
+            ${config.profiles.map((p) => profileRow(p, apiBase))}
           </tbody>
         </table>
 
@@ -242,7 +242,7 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
             <h3>Add profile</h3>
             <button type="button" data-dialog-close aria-label="Close">✕</button>
           </div>
-          ${profileAddForm()}
+          ${profileAddForm(apiBase)}
         </dialog>
 
         <h2>Raw config</h2>

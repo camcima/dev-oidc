@@ -6,6 +6,7 @@ import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface ProfilesRoutesDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
+  pathPrefix?: string;
 }
 
 const ProfileInput = z.object({
@@ -27,17 +28,19 @@ function toProfile(input: z.infer<typeof ProfileInput>): Profile {
 }
 
 export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoutesDeps): void {
-  app.get('/admin/api/config', async (request) => {
+  const prefix = deps.pathPrefix ?? '/admin/api';
+
+  app.get(`${prefix}/config`, async (request) => {
     const tenant = deps.getTenant(request);
     return tenant.runtime.get();
   });
 
-  app.get('/admin/api/profiles', async (request) => {
+  app.get(`${prefix}/profiles`, async (request) => {
     const tenant = deps.getTenant(request);
     return tenant.runtime.get().profiles;
   });
 
-  app.post('/admin/api/profiles', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post(`${prefix}/profiles`, async (request: FastifyRequest, reply: FastifyReply) => {
     const tenant = deps.getTenant(request);
     const parsed = ProfileInput.safeParse(request.body);
     if (!parsed.success) {
@@ -57,7 +60,7 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
   });
 
   app.put(
-    '/admin/api/profiles/:id',
+    `${prefix}/profiles/:id`,
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenant = deps.getTenant(request);
       const parsed = ProfileInput.safeParse(request.body);
@@ -80,7 +83,7 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
   );
 
   app.delete(
-    '/admin/api/profiles/:id',
+    `${prefix}/profiles/:id`,
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenant = deps.getTenant(request);
       const current = tenant.runtime.get();
