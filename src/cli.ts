@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 import { startLegacy } from '@/cli/legacy.js';
+import { runList, runRegister, runUnregister } from '@/cli/hub-commands.js';
+import { defaultHubConfigPath } from '@/hub/loader.js';
 import { createLogger } from '@/logger.js';
 
 const HELP = [
@@ -52,13 +54,47 @@ async function main(): Promise<void> {
     case 'start':
       await runStart(values, positionals);
       break;
-    // Phase 4 wires `register`/`unregister`/`list` here. Stub for now:
-    case 'register':
-    case 'unregister':
-    case 'list':
-      process.stderr.write(`dev-oidc: ${subcommand} not yet implemented\n`);
-      process.exit(2);
+    case 'register': {
+      const target = positionals[1];
+      if (!target) {
+        process.stderr.write('dev-oidc: register requires a path argument\n');
+        process.exit(1);
+      }
+      const hubConfigPath =
+        typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
+      const result = await runRegister({
+        hubConfigPath,
+        configPathArg: target,
+        slug: typeof values.slug === 'string' ? values.slug : undefined,
+      });
+      if (result.stdout) process.stdout.write(result.stdout);
+      if (result.stderr) process.stderr.write(result.stderr);
+      process.exit(result.exitCode);
       break;
+    }
+    case 'unregister': {
+      const slug = positionals[1];
+      if (!slug) {
+        process.stderr.write('dev-oidc: unregister requires a slug\n');
+        process.exit(1);
+      }
+      const hubConfigPath =
+        typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
+      const result = await runUnregister({ hubConfigPath, slug });
+      if (result.stdout) process.stdout.write(result.stdout);
+      if (result.stderr) process.stderr.write(result.stderr);
+      process.exit(result.exitCode);
+      break;
+    }
+    case 'list': {
+      const hubConfigPath =
+        typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
+      const result = await runList({ hubConfigPath, json: values.json === true });
+      if (result.stdout) process.stdout.write(result.stdout);
+      if (result.stderr) process.stderr.write(result.stderr);
+      process.exit(result.exitCode);
+      break;
+    }
     default:
       process.stdout.write(HELP);
       process.exit(1);
