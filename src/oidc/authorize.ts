@@ -1,11 +1,9 @@
-import type { FastifyInstance } from 'fastify';
-import type { RuntimeConfig } from '@/config/runtime.js';
-import type { PendingAuthStore } from '@/oidc/pending.js';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { renderLoginPage } from '@/login/page.js';
 
 export interface AuthorizeDeps {
-  runtime: RuntimeConfig;
-  pending: PendingAuthStore;
+  getTenant: (req: FastifyRequest) => ActiveTenantState;
 }
 
 interface AuthorizeQuery {
@@ -21,8 +19,9 @@ interface AuthorizeQuery {
 
 export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): void {
   app.get('/authorize', async (request, reply) => {
+    const tenant = deps.getTenant(request);
     const query = request.query as AuthorizeQuery;
-    const config = deps.runtime.get();
+    const config = tenant.runtime.get();
 
     if (!query.client_id) {
       return reply
@@ -68,7 +67,7 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       });
     }
 
-    const pendingAuthId = deps.pending.create({
+    const pendingAuthId = tenant.pending.create({
       clientId: client.clientId,
       redirectUri: query.redirect_uri,
       codeChallenge: query.code_challenge,

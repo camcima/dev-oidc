@@ -84,7 +84,21 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
       .send(renderIndexPage({ config: runtime.get(), adminEnabled }));
   });
 
-  registerAuthorize(app, { runtime, pending });
+  registerAuthorize(app, {
+    getTenant: () => ({
+      slug: '(legacy)',
+      configPath: options.configFilePath ?? '/dev/null',
+      status: 'active' as const,
+      issuer: runtime.get().issuer,
+      config: runtime.get(),
+      runtime,
+      keyMaterial,
+      jwks: jwksDocument,
+      codes,
+      pending,
+      watcher: null,
+    }),
+  });
   registerComplete(app, { runtime, pending, codes });
   registerToken(app, { runtime, codes, keyMaterial });
   registerLogout(app, { runtime });
