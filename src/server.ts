@@ -39,6 +39,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const runtime = createRuntimeConfig(options.config);
   const eventsEmitter: EventsEmitter = createEventsEmitter();
   const keyMaterial = await createKeyMaterial(options.config.signingKey);
+  const jwksDocument = buildJwks(keyMaterial);
   const codes = createCodeStore({
     ttlMs: 60_000,
     refreshTtlMs: options.config.refreshTokenTtlSeconds * 1_000,
@@ -75,9 +76,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     });
   });
 
-  app.get('/.well-known/jwks.json', async () => {
-    return buildJwks(keyMaterial);
-  });
+  app.get('/.well-known/jwks.json', async () => jwksDocument);
 
   app.get('/', async (_request, reply) => {
     const adminEnabled = Boolean(options.configFilePath);
