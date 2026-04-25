@@ -114,29 +114,47 @@ const SAFE_STYLES = new Html(STYLES); // module-level const string literal, neve
 // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 const SAFE_CLIENT_SCRIPT = new Html(CLIENT_SCRIPT); // module-level const string literal, never externally controlled
 
-function profileForm(profile: Profile | null): Html {
-  const isEdit = profile !== null;
-  const idSuffix = profile?.id ?? 'new';
-  const apiUrl = isEdit ? `/admin/api/profiles/${profile!.id}` : '/admin/api/profiles';
-  const method = isEdit ? 'PUT' : 'POST';
-  const claimsJson = JSON.stringify(profile?.claims ?? {}, null, 2);
-  const idValue = profile?.id ?? '';
-  const displayValue = profile?.displayName ?? '';
-  const emailValue = profile?.email ?? '';
-  const idReadonly = isEdit ? html`readonly` : '';
-
-  return html`<form class="edit" data-api="${apiUrl}" data-method="${method}" method="post">
-    <label for="id-${idSuffix}">ID</label>
-    <input name="id" id="id-${idSuffix}" value="${idValue}" required ${idReadonly} />
-    <label for="displayName-${idSuffix}">Display name</label>
-    <input name="displayName" id="displayName-${idSuffix}" value="${displayValue}" required />
-    <label for="email-${idSuffix}">Email</label>
-    <input name="email" id="email-${idSuffix}" type="email" value="${emailValue}" required />
-    <label for="claims-${idSuffix}">Claims (JSON)</label>
-    <textarea name="claims" id="claims-${idSuffix}">${claimsJson}</textarea>
+function profileEditForm(profile: Profile): Html {
+  const claimsJson = JSON.stringify(profile.claims, null, 2);
+  return html`<form
+    class="edit"
+    data-api="/admin/api/profiles/${profile.id}"
+    data-method="PUT"
+    method="post"
+  >
+    <label for="id-${profile.id}">ID</label>
+    <input name="id" id="id-${profile.id}" value="${profile.id}" required readonly />
+    <label for="displayName-${profile.id}">Display name</label>
+    <input
+      name="displayName"
+      id="displayName-${profile.id}"
+      value="${profile.displayName}"
+      required
+    />
+    <label for="email-${profile.id}">Email</label>
+    <input name="email" id="email-${profile.id}" type="email" value="${profile.email}" required />
+    <label for="claims-${profile.id}">Claims (JSON)</label>
+    <textarea name="claims" id="claims-${profile.id}">${claimsJson}</textarea>
     <div class="wide">
       <button type="button" data-dialog-close>Cancel</button>
-      <button type="submit">${isEdit ? 'Save' : 'Add'}</button>
+      <button type="submit">Save</button>
+    </div>
+  </form>`;
+}
+
+function profileAddForm(): Html {
+  return html`<form class="edit" data-api="/admin/api/profiles" data-method="POST" method="post">
+    <label for="id-new">ID</label>
+    <input name="id" id="id-new" value="" required />
+    <label for="displayName-new">Display name</label>
+    <input name="displayName" id="displayName-new" value="" required />
+    <label for="email-new">Email</label>
+    <input name="email" id="email-new" type="email" value="" required />
+    <label for="claims-new">Claims (JSON)</label>
+    <textarea name="claims" id="claims-new">{}</textarea>
+    <div class="wide">
+      <button type="button" data-dialog-close>Cancel</button>
+      <button type="submit">Add</button>
     </div>
   </form>`;
 }
@@ -160,7 +178,7 @@ function profileRow(profile: Profile): Html {
           <h3>Edit profile — ${profile.displayName}</h3>
           <button type="button" data-dialog-close aria-label="Close">✕</button>
         </div>
-        ${profileForm(profile)}
+        ${profileEditForm(profile)}
       </dialog>
     </td>
   </tr>`;
@@ -216,7 +234,7 @@ export function renderAdminPage(config: Config): string {
             <h3>Add profile</h3>
             <button type="button" data-dialog-close aria-label="Close">✕</button>
           </div>
-          ${profileForm(null)}
+          ${profileAddForm()}
         </dialog>
 
         <h2>Raw config</h2>
