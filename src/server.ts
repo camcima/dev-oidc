@@ -63,7 +63,16 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   await app.register(formbody);
 
   app.get('/.well-known/openid-configuration', async () => {
-    return buildDiscoveryDocument({ issuer: runtime.get().issuer });
+    const cfg = runtime.get();
+    const hasSecretClient = cfg.clients.some((c) => c.clientSecret !== undefined);
+    const authMethods: ('none' | 'client_secret_post' | 'client_secret_basic')[] = hasSecretClient
+      ? ['none', 'client_secret_post', 'client_secret_basic']
+      : ['none'];
+    return buildDiscoveryDocument({
+      issuer: cfg.issuer,
+      signingAlg: keyMaterial.alg,
+      authMethods,
+    });
   });
 
   app.get('/.well-known/jwks.json', async () => {

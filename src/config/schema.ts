@@ -8,6 +8,7 @@ const SigningKeySchema = z.object({
 
 const ClientSchema = z.object({
   clientId: z.string().min(1),
+  clientSecret: z.string().min(1).optional(),
   redirectUris: z.array(z.string().url()).min(1),
   postLogoutRedirectUris: z.array(z.string().url()).default([]),
   audience: z.string().min(1),

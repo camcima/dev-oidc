@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { RuntimeConfig } from '@/config/runtime.js';
 import type { CodeStore } from '@/oidc/codes.js';
@@ -19,6 +19,7 @@ interface TokenBody {
   code_verifier?: string;
   redirect_uri?: string;
   client_id?: string;
+  client_secret?: string;
   refresh_token?: string;
 }
 
@@ -26,9 +27,77 @@ function s256(input: string): string {
   return createHash('sha256').update(input).digest('base64url');
 }
 
+interface ExtractedCreds {
+  clientId?: string;
+  secret?: string;
+  conflict?: boolean;
+}
+
+function extractClientCredentials(request: FastifyRequest, body: TokenBody): ExtractedCreds {
+  const auth = request.headers.authorization;
+  let basicId: string | undefined;
+  let basicSecret: string | undefined;
+  if (auth && /^Basic\s+/i.test(auth)) {
+    const decoded = Buffer.from(auth.replace(/^Basic\s+/i, ''), 'base64').toString('utf8');
+    const idx = decoded.indexOf(':');
+    if (idx > 0) {
+      basicId = decoded.slice(0, idx);
+      basicSecret = decoded.slice(idx + 1);
+    }
+  }
+
+  const formId = body.client_id;
+  const formSecret = body.client_secret;
+
+  if (basicId && formId && basicId !== formId) return { conflict: true };
+  if (basicSecret && formSecret && basicSecret !== formSecret) return { conflict: true };
+
+  return { clientId: basicId ?? formId, secret: basicSecret ?? formSecret };
+}
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a, 'utf8');
+  const bb = Buffer.from(b, 'utf8');
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+}
+
 export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
   app.post('/token', async (request, reply) => {
     const body = request.body as TokenBody;
+    const creds = extractClientCredentials(request, body);
+    if (creds.conflict) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: 'client credentials disagree between Authorization header and body',
+      });
+    }
+    if (!creds.clientId) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: 'client_id required',
+      });
+    }
+
+    const config = deps.runtime.get();
+    const client = config.clients.find((c) => c.clientId === creds.clientId);
+    if (!client) {
+      return reply.code(401).header('www-authenticate', 'Basic').send({ error: 'invalid_client' });
+    }
+
+    if (client.clientSecret) {
+      if (!creds.secret || !constantTimeEqual(client.clientSecret, creds.secret)) {
+        return reply
+          .code(401)
+          .header('www-authenticate', 'Basic')
+          .send({ error: 'invalid_client' });
+      }
+    }
+
+    // Override body.client_id with the verified id, in case the body field
+    // was missing but Basic auth supplied it.
+    body.client_id = creds.clientId;
+
     switch (body.grant_type) {
       case 'authorization_code':
         return handleCodeGrant(deps, body, reply);

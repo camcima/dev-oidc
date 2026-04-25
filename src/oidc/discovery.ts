@@ -13,7 +13,13 @@ export interface DiscoveryDocument {
   token_endpoint_auth_methods_supported: readonly string[];
 }
 
-export function buildDiscoveryDocument(input: { issuer: string }): DiscoveryDocument {
+export interface DiscoveryInput {
+  issuer: string;
+  signingAlg: 'RS256' | 'ES256';
+  authMethods: readonly ('none' | 'client_secret_post' | 'client_secret_basic')[];
+}
+
+export function buildDiscoveryDocument(input: DiscoveryInput): DiscoveryDocument {
   const issuer = input.issuer.replace(/\/+$/, '');
   return {
     issuer,
@@ -25,8 +31,8 @@ export function buildDiscoveryDocument(input: { issuer: string }): DiscoveryDocu
     grant_types_supported: ['authorization_code', 'refresh_token'],
     subject_types_supported: ['public'],
     code_challenge_methods_supported: ['S256'],
-    id_token_signing_alg_values_supported: ['RS256'],
+    id_token_signing_alg_values_supported: [input.signingAlg],
     scopes_supported: ['openid', 'profile', 'email'],
-    token_endpoint_auth_methods_supported: ['none'],
+    token_endpoint_auth_methods_supported: input.authMethods,
   };
 }
