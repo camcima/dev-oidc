@@ -1,19 +1,5 @@
-import type { ReactElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import type { Config, Profile } from '@/config/schema.js';
-
-// Placeholder replaced post-render so we never pass dynamic content through
-// dangerouslySetInnerHTML (which semgrep flags for non-constant values).
-const RAW_CONFIG_PLACEHOLDER = '<!--RAW_CONFIG_PLACEHOLDER-->';
-
-export function renderAdminPage(config: Config): string {
-  const body = renderToStaticMarkup(<AdminPage config={config} />);
-  const configJson = JSON.stringify(config, null, 2);
-  // Escape only the characters that matter inside a <pre> text context.
-  const safeJson = configJson.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const html = body.replace(RAW_CONFIG_PLACEHOLDER, safeJson);
-  return `<!doctype html>\n${html}`;
-}
+import { Html, html, renderToString } from '@/shared/html.js';
 
 const STYLES = `
   body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; background: #f7f8fa; color: #1a1f2c; max-width: 1100px; }
@@ -59,11 +45,6 @@ const CLIENT_SCRIPT = `
       window.location.reload();
     });
 
-    // Open / close dialogs.
-    //   data-open-dialog="<id>" opens <dialog id="<id>">.
-    //   data-dialog-close inside a dialog closes its parent dialog.
-    //   data-edit-dialog="<profileId>" is syntactic sugar for the per-profile
-    //   edit dialogs, which follow the edit-dialog-<id> naming convention.
     document.body.addEventListener('click', (ev) => {
       const target = ev.target;
       if (!(target instanceof HTMLElement)) return;
@@ -128,34 +109,92 @@ const CLIENT_SCRIPT = `
   })();
 `.trim();
 
-interface AdminPageProps {
-  config: Config;
+// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+const SAFE_STYLES = new Html(STYLES); // module-level const string literal, never externally controlled
+// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+const SAFE_CLIENT_SCRIPT = new Html(CLIENT_SCRIPT); // module-level const string literal, never externally controlled
+
+function profileForm(profile: Profile | null): Html {
+  const isEdit = profile !== null;
+  const idSuffix = profile?.id ?? 'new';
+  const apiUrl = isEdit ? `/admin/api/profiles/${profile!.id}` : '/admin/api/profiles';
+  const method = isEdit ? 'PUT' : 'POST';
+  const claimsJson = JSON.stringify(profile?.claims ?? {}, null, 2);
+  const idValue = profile?.id ?? '';
+  const displayValue = profile?.displayName ?? '';
+  const emailValue = profile?.email ?? '';
+  const idReadonly = isEdit ? html`readonly` : '';
+
+  return html`<form class="edit" data-api="${apiUrl}" data-method="${method}" method="post">
+    <label for="id-${idSuffix}">ID</label>
+    <input name="id" id="id-${idSuffix}" value="${idValue}" required ${idReadonly} />
+    <label for="displayName-${idSuffix}">Display name</label>
+    <input name="displayName" id="displayName-${idSuffix}" value="${displayValue}" required />
+    <label for="email-${idSuffix}">Email</label>
+    <input name="email" id="email-${idSuffix}" type="email" value="${emailValue}" required />
+    <label for="claims-${idSuffix}">Claims (JSON)</label>
+    <textarea name="claims" id="claims-${idSuffix}">${claimsJson}</textarea>
+    <div class="wide">
+      <button type="button" data-dialog-close>Cancel</button>
+      <button type="submit">${isEdit ? 'Save' : 'Add'}</button>
+    </div>
+  </form>`;
 }
 
-function AdminPage({ config }: AdminPageProps): ReactElement {
-  return (
+function profileRow(profile: Profile): Html {
+  const claimsCount = Object.keys(profile.claims).length;
+  return html`<tr>
+    <td>${profile.id}</td>
+    <td>${profile.displayName}</td>
+    <td>${profile.email}</td>
+    <td>${claimsCount} claim(s)</td>
+    <td>
+      <div class="actions">
+        <button type="button" data-edit-dialog="${profile.id}">Edit</button>
+        <form data-api="/admin/api/profiles/${profile.id}" data-method="DELETE" method="post">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </div>
+      <dialog id="edit-dialog-${profile.id}" class="edit-dialog">
+        <div class="dialog-head">
+          <h3>Edit profile — ${profile.displayName}</h3>
+          <button type="button" data-dialog-close aria-label="Close">✕</button>
+        </div>
+        ${profileForm(profile)}
+      </dialog>
+    </td>
+  </tr>`;
+}
+
+export function renderAdminPage(config: Config): string {
+  // The raw-config dump sits inside a <div> element body. Quotes are not
+  // dangerous in element-text context, only in attribute values. Standard
+  // escape would convert " to &quot;, which is correct but visually noisy
+  // for a JSON dump. Escape only the chars that break out of element-text.
+  const configJson = JSON.stringify(config, null, 2);
+  const safeJson = configJson.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+  const safeJsonHtml = new Html(safeJson); // escapes &, <, > — safe for element-text context
+
+  const doc = html`<!doctype html>
     <html lang="en">
       <head>
-        <meta charSet="utf-8" />
+        <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>dev-oidc Admin</title>
-        <style dangerouslySetInnerHTML={{ __html: STYLES }} />
+        <style>
+          ${SAFE_STYLES}
+        </style>
       </head>
       <body>
         <h1>dev-oidc Admin</h1>
-
-        <div id="reload-banner" className="banner">
-          {'Config changed on disk. '}
-          <a id="reload-link" href="#">
-            Reload
-          </a>
+        <div id="reload-banner" class="banner">
+          Config changed on disk. <a id="reload-link" href="#">Reload</a>
         </div>
 
-        <div className="section-head">
-          <h2>Profiles ({config.profiles.length})</h2>
-          <button type="button" className="primary" data-open-dialog="add-dialog">
-            Add profile
-          </button>
+        <div class="section-head">
+          <h2>Profiles (${config.profiles.length})</h2>
+          <button type="button" class="primary" data-open-dialog="add-dialog">Add profile</button>
         </div>
         <table>
           <thead>
@@ -168,127 +207,26 @@ function AdminPage({ config }: AdminPageProps): ReactElement {
             </tr>
           </thead>
           <tbody>
-            {config.profiles.map((p) => (
-              <ProfileRow key={p.id} profile={p} />
-            ))}
+            ${config.profiles.map(profileRow)}
           </tbody>
         </table>
 
-        <AddDialog />
+        <dialog id="add-dialog" class="edit-dialog">
+          <div class="dialog-head">
+            <h3>Add profile</h3>
+            <button type="button" data-dialog-close aria-label="Close">✕</button>
+          </div>
+          ${profileForm(null)}
+        </dialog>
 
         <h2>Raw config</h2>
-        {/* Raw config JSON is injected post-render via string replace in renderAdminPage */}
-        <div className="json" dangerouslySetInnerHTML={{ __html: RAW_CONFIG_PLACEHOLDER }} />
+        <div class="json">${safeJsonHtml}</div>
 
-        <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }} />
+        <script>
+          ${SAFE_CLIENT_SCRIPT};
+        </script>
       </body>
-    </html>
-  );
-}
+    </html>`;
 
-function AddDialog(): ReactElement {
-  return (
-    <dialog id="add-dialog" className="edit-dialog">
-      <div className="dialog-head">
-        <h3>Add profile</h3>
-        <button type="button" data-dialog-close aria-label="Close">
-          ✕
-        </button>
-      </div>
-      <ProfileForm showCancel />
-    </dialog>
-  );
-}
-
-function ProfileRow({ profile }: { profile: Profile }): ReactElement {
-  return (
-    <tr>
-      <td>{profile.id}</td>
-      <td>{profile.displayName}</td>
-      <td>{profile.email}</td>
-      <td>{Object.keys(profile.claims).length} claim(s)</td>
-      <td>
-        <div className="actions">
-          <button type="button" data-edit-dialog={profile.id}>
-            Edit
-          </button>
-          <form data-api={`/admin/api/profiles/${profile.id}`} data-method="DELETE" method="post">
-            <button type="submit" className="danger">
-              Delete
-            </button>
-          </form>
-        </div>
-        <EditDialog profile={profile} />
-      </td>
-    </tr>
-  );
-}
-
-function EditDialog({ profile }: { profile: Profile }): ReactElement {
-  return (
-    <dialog id={`edit-dialog-${profile.id}`} className="edit-dialog">
-      <div className="dialog-head">
-        <h3>Edit profile — {profile.displayName}</h3>
-        <button type="button" data-dialog-close aria-label="Close">
-          ✕
-        </button>
-      </div>
-      <ProfileForm profile={profile} showCancel />
-    </dialog>
-  );
-}
-
-interface ProfileFormProps {
-  profile?: Profile;
-  showCancel?: boolean;
-}
-
-function ProfileForm({ profile, showCancel = false }: ProfileFormProps): ReactElement {
-  const isEdit = Boolean(profile);
-  return (
-    <form
-      className="edit"
-      data-api={isEdit ? `/admin/api/profiles/${profile!.id}` : '/admin/api/profiles'}
-      data-method={isEdit ? 'PUT' : 'POST'}
-      method="post"
-    >
-      <label htmlFor={`id-${profile?.id ?? 'new'}`}>ID</label>
-      <input
-        name="id"
-        id={`id-${profile?.id ?? 'new'}`}
-        defaultValue={profile?.id ?? ''}
-        required
-        readOnly={isEdit}
-      />
-      <label htmlFor={`displayName-${profile?.id ?? 'new'}`}>Display name</label>
-      <input
-        name="displayName"
-        id={`displayName-${profile?.id ?? 'new'}`}
-        defaultValue={profile?.displayName ?? ''}
-        required
-      />
-      <label htmlFor={`email-${profile?.id ?? 'new'}`}>Email</label>
-      <input
-        name="email"
-        id={`email-${profile?.id ?? 'new'}`}
-        type="email"
-        defaultValue={profile?.email ?? ''}
-        required
-      />
-      <label htmlFor={`claims-${profile?.id ?? 'new'}`}>Claims (JSON)</label>
-      <textarea
-        name="claims"
-        id={`claims-${profile?.id ?? 'new'}`}
-        defaultValue={JSON.stringify(profile?.claims ?? {}, null, 2)}
-      />
-      <div className="wide">
-        {showCancel && (
-          <button type="button" data-dialog-close>
-            Cancel
-          </button>
-        )}
-        <button type="submit">{isEdit ? 'Save' : 'Add'}</button>
-      </div>
-    </form>
-  );
+  return renderToString(doc);
 }
