@@ -21,5 +21,9 @@ RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 
 EXPOSE 8095
+# Bind to 0.0.0.0 so the published port is reachable from the host. Override
+# --public-url at run time (e.g. `-e DEV_OIDC_PUBLIC_URL=http://host.docker.internal:8095 ...`)
+# if relying parties resolve dev-oidc through a different name than they
+# advertise via OIDC discovery.
 ENTRYPOINT ["node", "dist/cli.js"]
-CMD ["start", "--config", "/config/config.json"]
+CMD ["start", "--config", "/config/config.json", "--host", "0.0.0.0"]

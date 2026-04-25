@@ -84,7 +84,11 @@ export function registerAdminGuard(app: FastifyInstance, options: AdminGuardOpti
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
     const url = req.url;
-    if (!url.startsWith('/admin')) return;
+    // Match exactly /admin and the /admin/<...> subtree only. Earlier
+    // implementations used `startsWith('/admin')` which would also match
+    // sibling paths like `/administer` or `/admin-foo`.
+    const isAdminPath = url === '/admin' || url.startsWith('/admin/') || url.startsWith('/admin?');
+    if (!isAdminPath) return;
 
     const host = req.headers.host;
     if (!host || !allowedHosts.has(normalizeHostHeader(host))) {

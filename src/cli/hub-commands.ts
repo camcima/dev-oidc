@@ -1,9 +1,31 @@
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import { deriveSlugFromPath } from '@/cli/slug.js';
 import { loadConfig } from '@/config/loader.js';
 import { loadHubConfig, mutateHubConfig } from '@/hub/loader.js';
 import { computeIssuer, deriveDefaultPublicUrl } from '@/hub/issuer.js';
 import { isReservedSlug, SLUG_REGEX } from '@/hub/schema.js';
+
+const DEFAULT_PROJECT_CONFIG_FILENAME = 'dev-oidc.config.json';
+
+/**
+ * Accept either a path-to-`.json` or a project directory. When given a
+ * directory we look for `dev-oidc.config.json` inside it. This matches how
+ * users naturally describe registration ("register this project"), while
+ * still supporting an explicit file path for repos that diverge from the
+ * default name.
+ */
+async function resolveProjectConfigPath(arg: string): Promise<string> {
+  const abs = path.resolve(arg);
+  try {
+    const st = await stat(abs);
+    if (st.isDirectory()) return path.join(abs, DEFAULT_PROJECT_CONFIG_FILENAME);
+  } catch {
+    // Path doesn't exist; fall through and let downstream loadConfig
+    // produce the canonical "ENOENT" error.
+  }
+  return abs;
+}
 
 export interface CommandResult {
   exitCode: 0 | 1 | 2;
@@ -18,11 +40,11 @@ export interface RegisterOptions {
 }
 
 export async function runRegister(options: RegisterOptions): Promise<CommandResult> {
-  const absConfig = path.resolve(options.configPathArg);
+  const absConfig = await resolveProjectConfigPath(options.configPathArg);
   if (!absConfig.endsWith('.json')) {
     return {
       exitCode: 1,
-      stderr: `dev-oidc: project config path must end in .json: ${absConfig}\n`,
+      stderr: `dev-oidc: project config path must end in .json (got ${absConfig}); pass a directory containing ${DEFAULT_PROJECT_CONFIG_FILENAME} or an explicit .json path\n`,
     };
   }
 
@@ -71,7 +93,15 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
         stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath as string}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
       };
     }
-    throw err;
+    // Lockfile timeouts, fs permission errors, malformed hub.json on read, etc.
+    // Map to exitCode=2 (system error) so the CLI exits cleanly with a clear
+    // message instead of falling through to the top-level "failed to start"
+    // catch.
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      exitCode: 2,
+      stderr: `dev-oidc: failed to update hub config: ${msg}\n`,
+    };
   }
   return { exitCode: 0, stdout: `Registered "${slug}" → ${absConfig}\n` };
 }
@@ -102,7 +132,11 @@ export async function runUnregister(options: UnregisterOptions): Promise<Command
     if (err instanceof Error && err.message === '__unknown_slug__') {
       return { exitCode: 1, stderr: `dev-oidc: unknown slug "${options.slug}"\n` };
     }
-    throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      exitCode: 2,
+      stderr: `dev-oidc: failed to update hub config: ${msg}\n`,
+    };
   }
   return {
     exitCode: 0,
@@ -116,7 +150,13 @@ export interface ListOptions {
 }
 
 export async function runList(options: ListOptions): Promise<CommandResult> {
-  const hub = await loadHubConfig(options.hubConfigPath);
+  let hub;
+  try {
+    hub = await loadHubConfig(options.hubConfigPath);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { exitCode: 2, stderr: `dev-oidc: failed to read hub config: ${msg}\n` };
+  }
   if (options.json) {
     return { exitCode: 0, stdout: JSON.stringify(hub.tenants, null, 2) + '\n' };
   }

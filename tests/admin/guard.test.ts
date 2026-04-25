@@ -108,4 +108,30 @@ describe('admin guard', () => {
     });
     expect(res.statusCode).toBe(200);
   });
+
+  it('does not match sibling paths beginning with the literal "admin"', async () => {
+    // `/administer` and `/admin-foo` should NOT trigger the guard. We
+    // register a probe route and verify it serves with a foreign Host —
+    // the guard would have rejected if it had matched.
+    app.get('/administer', async () => ({ ok: true }));
+    app.get('/admin-foo', async () => ({ ok: true }));
+    for (const url of ['/administer', '/admin-foo']) {
+      const res = await app.inject({
+        method: 'GET',
+        url,
+        headers: { host: 'evil.com', origin: 'https://evil.com' },
+      });
+      expect(res.statusCode, url).toBe(200);
+    }
+  });
+
+  it('still matches /admin with a query string', async () => {
+    app.get('/admin', async () => ({ ok: true }));
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin?foo=bar',
+      headers: { host: 'evil.com' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 });

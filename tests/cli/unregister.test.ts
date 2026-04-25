@@ -32,4 +32,23 @@ describe('unregister', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toMatch(/unknown slug/i);
   });
+
+  it('rejects malformed slug shape with exitCode=1', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-'));
+    const hub = path.join(dir, 'hub.json');
+    const result = await runUnregister({ hubConfigPath: hub, slug: '../foo' });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/invalid slug shape/i);
+    // The malformed input must NOT be echoed back unsanitized.
+    expect(result.stderr).not.toContain('../foo');
+  });
+
+  it('returns exitCode=2 when the hub config file is malformed', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-bad-'));
+    const hub = path.join(dir, 'hub.json');
+    writeFileSync(hub, '{not valid json');
+    const result = await runUnregister({ hubConfigPath: hub, slug: 'app' });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/failed to update hub config/i);
+  });
 });

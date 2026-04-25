@@ -1,30 +1,87 @@
-import Fastify from 'fastify';
-import { describe, expect, it } from 'vitest';
+import type { FastifyInstance } from 'fastify';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEventsEmitter, registerEventsRoute } from '@/admin/events.js';
 
 describe('events', () => {
-  it('emits config-changed events to subscribed clients via SSE', async () => {
+  it('writes the SSE handshake headers (200 + text/event-stream)', async () => {
+    // Direct check on the handler: invoke registerEventsRoute and capture
+    // what it writes to reply.raw.writeHead. Avoids bringing up a real
+    // socket (the SSE stream stays open and would hang fetch-based tests).
     const emitter = createEventsEmitter();
-    const app = Fastify();
+    let writtenStatus: number | null = null;
+    let writtenHeaders: Record<string, string> | null = null;
+    const fakeReply = {
+      raw: {
+        writeHead: (status: number, headers: Record<string, string>): void => {
+          writtenStatus = status;
+          writtenHeaders = headers;
+        },
+        write: (): boolean => true,
+        on: (): void => undefined,
+        writableEnded: false,
+      },
+    };
+    const fakeRequest = { raw: { on: (): void => undefined } };
+    const app = {
+      get: (
+        _path: string,
+        handler: (
+          req: { raw: { on: () => void } },
+          reply: typeof fakeReply,
+        ) => void | Promise<void>,
+      ): void => {
+        void Promise.resolve(handler(fakeRequest, fakeReply));
+      },
+    } as unknown as FastifyInstance;
     registerEventsRoute(app, { emitter });
-    await app.listen({ port: 0, host: '127.0.0.1' });
-    const address = app.server.address();
-    const port = typeof address === 'object' && address ? address.port : 0;
 
-    try {
-      const _response = await fetch(`http://127.0.0.1:${port}/admin/events`, {
-        signal: AbortSignal.timeout(3000),
-      }).catch((err) => err);
+    // Give the microtask queue a tick so the handler runs.
+    await Promise.resolve();
+    expect(writtenStatus).toBe(200);
+    expect(writtenHeaders).not.toBeNull();
+    expect(writtenHeaders!['content-type']).toMatch(/text\/event-stream/);
+  });
 
-      // Can't fully consume SSE in a test easily; check the handshake instead.
-      // Fastify should respond with content-type text/event-stream.
-      // Use a shorter test that checks the emitter's subscribe directly.
-      emitter.emit({ type: 'config-changed', slug: '(legacy)' });
+  it('writes a config-changed frame with the slug payload to subscribed clients', async () => {
+    // Functional check at the SSE handler level: capture what registerEventsRoute
+    // writes through Fastify's `reply.raw` for one event by stubbing the raw
+    // response. This proves both that the listener fires and that the wire
+    // format matches the SSE spec — without binding to a TCP socket.
+    const emitter = createEventsEmitter();
+    const writes: string[] = [];
+    const fakeReply = {
+      raw: {
+        writeHead: (): void => undefined,
+        write: (chunk: string): boolean => {
+          writes.push(chunk);
+          return true;
+        },
+        on: (): void => undefined,
+        writableEnded: false,
+      },
+    };
+    const fakeRequest = { raw: { on: (): void => undefined } };
+    // Mimic Fastify's call site: invoke the registered handler directly.
+    const app = {
+      get: (
+        _path: string,
+        handler: (
+          req: { raw: { on: () => void } },
+          reply: typeof fakeReply,
+        ) => void | Promise<void>,
+      ): void => {
+        void Promise.resolve(handler(fakeRequest, fakeReply));
+      },
+    } as unknown as FastifyInstance;
+    registerEventsRoute(app, { emitter });
 
-      expect(true).toBe(true);
-    } finally {
-      await app.close();
-    }
+    emitter.emit({ type: 'config-changed', slug: 'my-tenant' });
+
+    const eventLine = writes.find((w) => w.startsWith('event:'));
+    const dataLine = writes.find((w) => w.startsWith('data:'));
+    expect(eventLine).toBe('event: config-changed\n');
+    expect(dataLine).toContain('"slug":"my-tenant"');
+    expect(dataLine).toContain('"type":"config-changed"');
   });
 
   it('emitter fans out events to all subscribers', () => {
@@ -57,5 +114,136 @@ describe('events', () => {
 
     expect(received).toHaveLength(1);
     expect(received[0]).toEqual({ type: 'config-changed', slug: 'my-tenant' });
+  });
+});
+
+describe('events keepalive', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function harness(): {
+    closeHandlers: Array<() => void>;
+    finishHandlers: Array<() => void>;
+    errorHandlers: Array<() => void>;
+    requestCloseHandlers: Array<() => void>;
+    fakeReply: {
+      raw: {
+        writeHead: () => void;
+        write: (s: string) => boolean;
+        on: (event: string, fn: () => void) => void;
+        writableEnded: boolean;
+      };
+    };
+    fakeRequest: { raw: { on: (event: string, fn: () => void) => void } };
+    writes: string[];
+  } {
+    const closeHandlers: Array<() => void> = [];
+    const finishHandlers: Array<() => void> = [];
+    const errorHandlers: Array<() => void> = [];
+    const requestCloseHandlers: Array<() => void> = [];
+    const writes: string[] = [];
+    return {
+      closeHandlers,
+      finishHandlers,
+      errorHandlers,
+      requestCloseHandlers,
+      writes,
+      fakeReply: {
+        raw: {
+          writeHead: (): void => undefined,
+          write: (s: string): boolean => {
+            writes.push(s);
+            return true;
+          },
+          on: (event: string, fn: () => void): void => {
+            if (event === 'close') closeHandlers.push(fn);
+            else if (event === 'finish') finishHandlers.push(fn);
+            else if (event === 'error') errorHandlers.push(fn);
+          },
+          writableEnded: false,
+        },
+      },
+      fakeRequest: {
+        raw: {
+          on: (event: string, fn: () => void): void => {
+            if (event === 'close') requestCloseHandlers.push(fn);
+          },
+        },
+      },
+    };
+  }
+
+  function mountHandler(h: ReturnType<typeof harness>): ReturnType<typeof createEventsEmitter> {
+    const emitter = createEventsEmitter();
+    const app = {
+      get: (
+        _path: string,
+        handler: (req: typeof h.fakeRequest, reply: typeof h.fakeReply) => void,
+      ): void => {
+        handler(h.fakeRequest, h.fakeReply);
+      },
+    } as unknown as FastifyInstance;
+    registerEventsRoute(app, { emitter });
+    return emitter;
+  }
+
+  it('writes a keepalive frame on the 15s interval', () => {
+    const h = harness();
+    mountHandler(h);
+    h.writes.length = 0;
+    vi.advanceTimersByTime(15_000);
+    expect(h.writes).toContain(': keepalive\n\n');
+  });
+
+  it('cleans up the keepalive interval when the request closes', () => {
+    const h = harness();
+    const emitter = mountHandler(h);
+    expect(h.requestCloseHandlers).toHaveLength(1);
+    h.requestCloseHandlers[0]!(); // simulate client disconnect
+    h.writes.length = 0;
+    vi.advanceTimersByTime(60_000);
+    expect(h.writes).toEqual([]);
+    // Subsequent emits must not call the unsubscribed listener.
+    emitter.emit({ type: 'config-changed', slug: 'x' });
+    expect(h.writes).toEqual([]);
+  });
+
+  it('cleans up when reply.raw emits finish', () => {
+    const h = harness();
+    mountHandler(h);
+    expect(h.finishHandlers).toHaveLength(1);
+    h.finishHandlers[0]!();
+    h.writes.length = 0;
+    vi.advanceTimersByTime(60_000);
+    expect(h.writes).toEqual([]);
+  });
+
+  it('cleans up when keepalive write throws (socket closed mid-write)', () => {
+    const h = harness();
+    h.fakeReply.raw.write = (): boolean => {
+      throw new Error('EPIPE');
+    };
+    mountHandler(h);
+    // Trigger the keepalive interval — write throws → cleanup runs.
+    expect(() => vi.advanceTimersByTime(15_000)).not.toThrow();
+    // Subsequent intervals are cleared, so no further writes are attempted.
+    h.fakeReply.raw.write = (s: string): boolean => {
+      h.writes.push(s);
+      return true;
+    };
+    vi.advanceTimersByTime(60_000);
+    expect(h.writes).toEqual([]);
+  });
+
+  it('cleanup is idempotent (close + finish both fire)', () => {
+    const h = harness();
+    mountHandler(h);
+    h.requestCloseHandlers[0]!();
+    expect(() => h.finishHandlers[0]!()).not.toThrow();
+    expect(() => h.errorHandlers[0]!()).not.toThrow();
   });
 });

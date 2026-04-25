@@ -10,7 +10,7 @@ const HELP = [
   '',
   'Usage:',
   '  dev-oidc start [--config <path>] [options]',
-  '  dev-oidc register <project-config-path> [--slug <name>]',
+  '  dev-oidc register <project-dir-or-config-path> [--slug <name>]',
   '  dev-oidc unregister <slug>',
   '  dev-oidc list [--json]',
   '',
@@ -166,6 +166,9 @@ function setupShutdown(close: () => Promise<void>, logger: ReturnType<typeof cre
 
 main().catch((err: unknown) => {
   const logger = createLogger();
+  // `runStart` (legacy + hub) is the only path that can throw past `main()`
+  // — register/unregister/list always return a CommandResult. Anything that
+  // gets here is a server-startup failure.
   logger.error({ err }, 'dev-oidc failed to start');
   process.exit(1);
 });

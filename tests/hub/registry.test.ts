@@ -104,6 +104,32 @@ describe('TenantRegistry', () => {
 });
 
 describe('TenantRegistry.reconcile', () => {
+  it('retries an error tenant on the next reconcile after the config is fixed', async () => {
+    const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-fix-'));
+    const cfgPath = path.join(dir, 'dev-oidc.config.json');
+    // Initially invalid
+    writeFileSync(cfgPath, 'not valid json');
+
+    await reg.reconcile([{ slug: 'app', configPath: cfgPath, enabled: true }]);
+    expect(reg.get('app')?.status).toBe('error');
+
+    // User fixes the config on disk
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({
+        signingKey: { kid: 'k1', alg: 'RS256', source: 'generate' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [],
+      }),
+    );
+
+    // Same hub.json contents — only the project config changed. Reconcile
+    // should still retry the error tenant.
+    await reg.reconcile([{ slug: 'app', configPath: cfgPath, enabled: true }]);
+    expect(reg.get('app')?.status).toBe('active');
+  });
+
   it('adds new entries, removes missing entries, replaces changed configPath', async () => {
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
     const cfgA = tmpProjectConfig({ kid: 'a' });

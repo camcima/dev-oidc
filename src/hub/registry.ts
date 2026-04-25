@@ -200,10 +200,13 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         }
       }
 
-      // Add or refresh remaining entries.
+      // Add or refresh remaining entries. We retry tenants currently in the
+      // 'error' state on every reconcile so that fixing the project config
+      // and re-saving hub.json (or any other reconcile trigger) brings the
+      // tenant back without forcing the user to unregister + register.
       for (const entry of incomingEnabled) {
         const existing = tenants.get(entry.slug);
-        if (!existing || existing.configPath !== entry.configPath) {
+        if (!existing || existing.configPath !== entry.configPath || existing.status === 'error') {
           await this.add(entry);
         }
       }

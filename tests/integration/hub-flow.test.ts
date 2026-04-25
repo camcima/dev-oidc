@@ -156,6 +156,37 @@ describe('integration: hub mode auth-code flow', () => {
     }
   });
 
+  it('serves a landing page at / listing registered tenants', async () => {
+    const cfg = tmpProjectConfig();
+    const hubCfg = tmpHubConfig([{ slug: 'my-app', configPath: cfg }]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/' });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/html');
+      // Tenant slug, public URL, and discovery link are all present.
+      expect(res.payload).toContain('my-app');
+      expect(res.payload).toContain('http://localhost:8095');
+      expect(res.payload).toContain('/.well-known/openid-configuration');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('serves an empty-state landing page when no tenants are registered', async () => {
+    const hubCfg = tmpHubConfig([]);
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      const res = await server.app.inject({ method: 'GET', url: '/' });
+      expect(res.statusCode).toBe(200);
+      expect(res.payload).toContain('(none)');
+      // The "register" hint is shown so the user knows what to do next.
+      expect(res.payload).toContain('dev-oidc register');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('rejects reserved slugs at the OIDC pre-handler (defense-in-depth)', async () => {
     // Even if a tenant named "api" or "_internal" somehow ended up in the
     // tenants map (HubConfigSchema rejects it on parse, but be safe), the

@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - **Hub mode**: a single dev-oidc process serves multiple OIDC tenants concurrently, each backed by its own project-local `dev-oidc.config.json`. Registry lives at `~/.config/dev-oidc/hub.json`.
-- New CLI commands: `dev-oidc register <path>`, `dev-oidc unregister <slug>`, `dev-oidc list`.
+- New CLI commands: `dev-oidc register <project-dir-or-config-path>`, `dev-oidc unregister <slug>`, `dev-oidc list`. `register` accepts either a path to `dev-oidc.config.json` or a project directory containing it.
 - Hub dashboard at `/admin` lists all registered tenants and links to per-tenant management UIs.
 - `--port`, `--host`, `--public-url` flags for legacy single-tenant mode.
 - Cross-tenant isolation: signing keys, authorization codes, refresh tokens, and pending auth records are strictly scoped per tenant.
@@ -26,11 +26,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `dev-oidc start` now defaults to Hub mode. Use `dev-oidc start --config <path>` for the prior single-tenant behavior.
 - Project schema (`dev-oidc.config.json`) no longer accepts `issuer`, `port`, or `host`. Configs that include these fields fail validation with a tailored error pointing at the replacement.
 - Relative `signingKey.source` paths now resolve against the project config file's directory rather than the process CWD.
+- Docker image's default `CMD` now passes `--host 0.0.0.0` so the published container port is reachable from the host. Pre-0.2 images relied on the project config's `host` field, which the new schema rejects.
+
+### Programmatic API
+
+- `createDevOidcServer` is now an `await`able factory that takes `CreateServerOptions`. Existing single-arg `createDevOidcServer(config)` callers must switch to `createDevOidcServer({ config })`.
+- `issuer` on `CreateServerOptions` is **optional**. When omitted, the server derives it from `publicUrl` if present, otherwise from `http://${listenHost}:${listenPort}` (defaults `127.0.0.1`/`8095`). Pass an explicit `issuer` for setups where the URL relying parties use to fetch discovery differs from the listen address.
+- New optional `listenHost` and `listenPort` fields on `CreateServerOptions` (defaults `127.0.0.1`/`8095`); used to build the admin guard's Host-header allowlist and the default issuer.
+
+### Hot-reload scope
+
+`clients`/`profiles`/`branding`/`subjectClaim`/`tokenTtlSeconds` reload live on disk edits or admin writes. Changes to `signingKey` or `refreshTokenTtlSeconds` require a process restart (legacy mode) or `unregister`+`register` (Hub mode); they are baked into per-tenant key material and the refresh-token store at activation time.
 
 ### Migration from v0.1.x
 
 - **If you run `dev-oidc start --config ./config.json`**: pass `--port`, `--host`, or `--public-url` if you previously relied on those values from the project config. Otherwise no change.
-- **If you used Docker**: existing image continues to work in legacy mode; no change.
+- **If you used Docker**: re-pull `:latest` (or pin to `:0.2.0+`); the entrypoint now binds to `0.0.0.0` automatically. If your config previously included `"host"`/`"port"`, remove those fields — the schema now rejects them. If RPs reach the container by a non-`localhost` name, pass `-e DEV_OIDC_PUBLIC_URL=...` and `--public-url` accordingly.
+- **If you called `createDevOidcServer` programmatically**: drop any explicit `issuer` to use the new derivation, or keep your existing value if you need a specific one. Tests that pass `issuer` continue to work unchanged.
 - **If you used absolute `signingKey.source`**: no change.
 - **If you used a relative `signingKey.source` from a non-project CWD**: move to an absolute path or run from the project root.
 

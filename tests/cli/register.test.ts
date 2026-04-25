@@ -90,4 +90,37 @@ describe('register', () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toMatch(/reserved/i);
   });
+
+  it('returns exitCode=2 when the hub config file is malformed', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-bad-'));
+    const hub = path.join(dir, 'hub.json');
+    writeFileSync(hub, '{not valid json');
+    const cfg = newProject();
+    const result = await runRegister({ hubConfigPath: hub, configPathArg: cfg, slug: 'app' });
+    expect(result.exitCode).toBe(2);
+    expect(result.stderr).toMatch(/failed to update hub config/i);
+  });
+
+  it('accepts a project directory and resolves dev-oidc.config.json inside', async () => {
+    const hub = newHub();
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-dirarg-'));
+    const projectRoot = path.join(dir, 'pkg-from-dir');
+    mkdirSync(projectRoot);
+    const cfgPath = path.join(projectRoot, 'dev-oidc.config.json');
+    writeFileSync(
+      cfgPath,
+      JSON.stringify({
+        signingKey: { kid: 'k1' },
+        clients: [{ clientId: 'app', redirectUris: ['http://localhost/cb'], audience: 'a' }],
+        profiles: [],
+      }),
+    );
+
+    // Pass the directory, not the file
+    const result = await runRegister({ hubConfigPath: hub, configPathArg: projectRoot });
+    expect(result.exitCode).toBe(0);
+    const persisted = JSON.parse(readFileSync(hub, 'utf8'));
+    expect(persisted.tenants[0].configPath).toBe(cfgPath);
+    expect(persisted.tenants[0].slug).toBe('pkg-from-dir');
+  });
 });

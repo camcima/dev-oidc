@@ -25,18 +25,37 @@ import type { ActiveTenantState } from '@/hub/tenant-state.js';
 export interface CreateServerOptions {
   config: Config;
   configFilePath?: string;
-  issuer: string; // injected from CLI in legacy mode (Phase 1 introduces flag)
+  /**
+   * Issuer URL advertised in the discovery document and embedded as `iss`
+   * in JWTs. When omitted, derived from `publicUrl` (preferred) or
+   * `http://${listenHost}:${listenPort}`. Pass an explicit value for
+   * production-like setups where the URL the relying party uses to fetch
+   * discovery differs from the listen address.
+   */
+  issuer?: string;
   /**
    * Listen host & port. Used to build the admin Host-header allowlist (CSRF
-   * + DNS rebinding defense). The CLI passes the same values it uses for
-   * `app.listen`. Defaults are `127.0.0.1` and `8095` (matching the
-   * documented defaults) so test callers that use `app.inject` without
+   * + DNS rebinding defense) and as the fallback for the issuer. The CLI
+   * passes the same values it uses for `app.listen`. Defaults are
+   * `127.0.0.1` and `8095` so test callers that use `app.inject` without
    * binding don't need to pass these.
    */
   listenHost?: string;
   listenPort?: number;
   publicUrl?: string;
   logger?: DevOidcLogger;
+}
+
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function deriveIssuer(options: CreateServerOptions): string {
+  if (options.issuer) return stripTrailingSlash(options.issuer);
+  if (options.publicUrl) return stripTrailingSlash(options.publicUrl);
+  const host = options.listenHost ?? '127.0.0.1';
+  const port = options.listenPort ?? 8095;
+  return `http://${host}:${port.toString()}`;
 }
 
 export interface DevOidcServer {
@@ -85,7 +104,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     codes,
     pending,
     watcher,
-    issuer: options.issuer,
+    issuer: deriveIssuer(options),
   };
 
   const getTenant = (_req: FastifyRequest): ActiveTenantState => tenant;
