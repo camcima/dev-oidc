@@ -6,6 +6,18 @@ import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
+import type { ActiveTenantState } from '@/hub/tenant-state.js';
+
+function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantState {
+  return {
+    slug: '(legacy)',
+    configPath: '/dev/null',
+    status: 'active',
+    issuer: 'http://localhost:8095',
+    watcher: null,
+    ...overrides,
+  } as ActiveTenantState;
+}
 
 function baseConfig(): Config {
   return {
@@ -33,9 +45,11 @@ async function buildApp() {
   const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-admin-'));
   const file = path.join(dir, 'config.json');
   writeFileSync(file, JSON.stringify(baseConfig(), null, 2));
-  const runtime = createRuntimeConfig(baseConfig());
+  const config = baseConfig();
+  const runtime = createRuntimeConfig(config);
   const app = Fastify();
-  registerProfilesRoutes(app, { runtime, configFilePath: file });
+  const tenant = buildActiveTenant({ config, runtime, configPath: file });
+  registerProfilesRoutes(app, { getTenant: () => tenant });
   return { app, runtime, file };
 }
 

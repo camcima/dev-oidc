@@ -158,7 +158,24 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   });
 
   if (options.configFilePath) {
-    registerProfilesRoutes(app, { runtime, configFilePath: options.configFilePath });
+    registerProfilesRoutes(app, {
+      getTenant: () => {
+        const config = runtime.get();
+        return {
+          slug: '(legacy)',
+          configPath: options.configFilePath ?? '/dev/null',
+          status: 'active' as const,
+          issuer: config.issuer,
+          config,
+          runtime,
+          keyMaterial,
+          jwks: jwksDocument,
+          codes,
+          pending,
+          watcher: null,
+        };
+      },
+    });
     registerEventsRoute(app, { emitter: eventsEmitter });
     app.get('/admin', async (_request, reply) => {
       return reply.code(200).type('text/html; charset=utf-8').send(renderAdminPage(runtime.get()));
