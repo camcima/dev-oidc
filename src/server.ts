@@ -138,7 +138,24 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
       };
     },
   });
-  registerLogout(app, { runtime });
+  registerLogout(app, {
+    getTenant: () => {
+      const config = runtime.get();
+      return {
+        slug: '(legacy)',
+        configPath: options.configFilePath ?? '/dev/null',
+        status: 'active' as const,
+        issuer: config.issuer,
+        config,
+        runtime,
+        keyMaterial,
+        jwks: jwksDocument,
+        codes,
+        pending,
+        watcher: null,
+      };
+    },
+  });
 
   if (options.configFilePath) {
     registerProfilesRoutes(app, { runtime, configFilePath: options.configFilePath });
