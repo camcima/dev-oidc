@@ -88,3 +88,44 @@ describe('createKeyMaterial (file-backed)', () => {
     ).rejects.toThrow(/has kid "original-kid", but config expects "different-kid"/);
   });
 });
+
+describe('createKeyMaterial (ES256)', () => {
+  it('generates an ES256 keypair when alg is ES256', async () => {
+    const km = await createKeyMaterial({ kid: 'es-1', alg: 'ES256', source: 'generate' });
+    expect(km.alg).toBe('ES256');
+    expect(km.publicJwk.alg).toBe('ES256');
+    expect(km.publicJwk.kty).toBe('EC');
+    expect(km.publicJwk.crv).toBe('P-256');
+  });
+
+  it('persists and reloads an ES256 key from file', async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-es-'));
+    const file = path.join(tmpDir, 'es-key.json');
+
+    const first = await createKeyMaterial({
+      kid: 'es-persist',
+      alg: 'ES256',
+      source: `file:${file}`,
+    });
+    const second = await createKeyMaterial({
+      kid: 'es-persist',
+      alg: 'ES256',
+      source: `file:${file}`,
+    });
+
+    expect(second.alg).toBe('ES256');
+    expect(second.publicJwk.x).toBe(first.publicJwk.x);
+    expect(second.publicJwk.y).toBe(first.publicJwk.y);
+  });
+
+  it('throws when configured alg differs from persisted alg', async () => {
+    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-mismatch-'));
+    const file = path.join(tmpDir, 'rs-key.json');
+
+    await createKeyMaterial({ kid: 'k', alg: 'RS256', source: `file:${file}` });
+
+    await expect(
+      createKeyMaterial({ kid: 'k', alg: 'ES256', source: `file:${file}` }),
+    ).rejects.toThrow(/has alg "RS256", but config expects "ES256"/);
+  });
+});

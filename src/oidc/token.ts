@@ -200,7 +200,7 @@ async function issueTokenSet(
   const baseClaims = buildClaims({ profile, subjectClaim: config.subjectClaim });
 
   const accessToken = await new jose.SignJWT({ ...baseClaims, scope })
-    .setProtectedHeader({ alg: 'RS256', kid: deps.keyMaterial.kid, typ: 'JWT' })
+    .setProtectedHeader({ alg: deps.keyMaterial.alg, kid: deps.keyMaterial.kid, typ: 'JWT' })
     .setIssuer(config.issuer)
     .setAudience(client.audience)
     .setSubject(profile.id)
@@ -209,7 +209,7 @@ async function issueTokenSet(
     .sign(deps.keyMaterial.privateKey);
 
   const idToken = await new jose.SignJWT({ ...baseClaims, nonce: nonce || undefined })
-    .setProtectedHeader({ alg: 'RS256', kid: deps.keyMaterial.kid, typ: 'JWT' })
+    .setProtectedHeader({ alg: deps.keyMaterial.alg, kid: deps.keyMaterial.kid, typ: 'JWT' })
     .setIssuer(config.issuer)
     .setAudience(clientId)
     .setSubject(profile.id)

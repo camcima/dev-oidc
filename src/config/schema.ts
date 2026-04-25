@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const SigningKeySchema = z.object({
   kid: z.string().min(1),
-  alg: z.enum(['RS256']).default('RS256'),
+  alg: z.enum(['RS256', 'ES256']).default('RS256'),
   source: z.union([z.literal('generate'), z.string().regex(/^file:.+/)]).default('generate'),
 });
 
