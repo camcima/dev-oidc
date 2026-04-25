@@ -11,6 +11,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `release-docker.yml` workflow that builds a multi-arch (`linux/amd64`, `linux/arm64`) image from a `v*` tag and pushes it to `ghcr.io/camcima/dev-oidc`. Triggered manually via `workflow_dispatch` so npm and Docker publish paths are independent.
 - `release:docker` and `release:all` npm scripts. `release:docker` dispatches the workflow for the current `package.json` version; `release:all` chains `release` (npm) and `release:docker`.
 
+## [0.2.0] - 2026-04-25
+
+### Added
+
+- **Hub mode**: a single dev-oidc process serves multiple OIDC tenants concurrently, each backed by its own project-local `dev-oidc.config.json`. Registry lives at `~/.config/dev-oidc/hub.json`.
+- New CLI commands: `dev-oidc register <path>`, `dev-oidc unregister <slug>`, `dev-oidc list`.
+- Hub dashboard at `/admin` lists all registered tenants and links to per-tenant management UIs.
+- `--port`, `--host`, `--public-url` flags for legacy single-tenant mode.
+- Cross-tenant isolation: signing keys, authorization codes, refresh tokens, and pending auth records are strictly scoped per tenant.
+
+### Changed (BREAKING)
+
+- `dev-oidc start` now defaults to Hub mode. Use `dev-oidc start --config <path>` for the prior single-tenant behavior.
+- Project schema (`dev-oidc.config.json`) no longer accepts `issuer`, `port`, or `host`. Configs that include these fields fail validation with a tailored error pointing at the replacement.
+- Relative `signingKey.source` paths now resolve against the project config file's directory rather than the process CWD.
+
+### Migration from v0.1.x
+
+- **If you run `dev-oidc start --config ./config.json`**: pass `--port`, `--host`, or `--public-url` if you previously relied on those values from the project config. Otherwise no change.
+- **If you used Docker**: existing image continues to work in legacy mode; no change.
+- **If you used absolute `signingKey.source`**: no change.
+- **If you used a relative `signingKey.source` from a non-project CWD**: move to an absolute path or run from the project root.
+
 ## [0.1.0] — 2026-04-25
 
 ### Breaking
