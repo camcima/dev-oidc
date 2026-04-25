@@ -32,87 +32,8 @@ const STYLES = `
   dialog.edit-dialog form.edit { border: none; border-radius: 0; max-width: none; padding: 1rem 1.125rem; }
 `.trim();
 
-const CLIENT_SCRIPT = `
-  (function() {
-    const banner = document.getElementById('reload-banner');
-    const es = new EventSource('/admin/events');
-    es.addEventListener('config-changed', () => {
-      if (banner) banner.classList.add('visible');
-    });
-
-    document.getElementById('reload-link').addEventListener('click', (e) => {
-      e.preventDefault();
-      window.location.reload();
-    });
-
-    document.body.addEventListener('click', (ev) => {
-      const target = ev.target;
-      if (!(target instanceof HTMLElement)) return;
-
-      const edit = target.closest('[data-edit-dialog]');
-      if (edit instanceof HTMLElement) {
-        const id = edit.dataset.editDialog;
-        const dialog = id ? document.getElementById('edit-dialog-' + id) : null;
-        if (dialog instanceof HTMLDialogElement) dialog.showModal();
-        return;
-      }
-
-      const opener = target.closest('[data-open-dialog]');
-      if (opener instanceof HTMLElement) {
-        const id = opener.dataset.openDialog;
-        const dialog = id ? document.getElementById(id) : null;
-        if (dialog instanceof HTMLDialogElement) dialog.showModal();
-        return;
-      }
-
-      const closer = target.closest('[data-dialog-close]');
-      if (closer instanceof HTMLElement) {
-        const dialog = closer.closest('dialog');
-        if (dialog instanceof HTMLDialogElement) dialog.close();
-      }
-    });
-
-    document.body.addEventListener('submit', async (ev) => {
-      const form = ev.target;
-      if (!(form instanceof HTMLFormElement)) return;
-      if (!form.dataset.api) return;
-      ev.preventDefault();
-      const method = form.dataset.method || 'POST';
-      const url = form.dataset.api;
-      let body = undefined;
-      if (method === 'POST' || method === 'PUT') {
-        const data = {};
-        for (const el of form.elements) {
-          if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) continue;
-          if (!el.name) continue;
-          if (el.name === 'claims') {
-            try { data[el.name] = el.value ? JSON.parse(el.value) : {}; }
-            catch (e) { alert('Invalid JSON in claims'); return; }
-          } else {
-            data[el.name] = el.value;
-          }
-        }
-        body = JSON.stringify(data);
-      }
-      const res = await fetch(url, {
-        method,
-        headers: body ? { 'content-type': 'application/json' } : {},
-        body,
-      });
-      if (res.ok) {
-        window.location.reload();
-      } else {
-        const err = await res.json().catch(() => ({ error: 'unknown' }));
-        alert(err.error_description || err.details || err.error || 'Request failed');
-      }
-    });
-  })()
-`.trim();
-
 // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 const SAFE_STYLES = new Html(STYLES); // module-level const string literal, never externally controlled
-// nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
-const SAFE_CLIENT_SCRIPT = new Html(CLIENT_SCRIPT); // module-level const string literal, never externally controlled
 
 function profileEditForm(profile: Profile, apiBase: string): Html {
   const claimsJson = JSON.stringify(profile.claims, null, 2);
@@ -193,6 +114,93 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
   const config = input.config;
   const apiBase =
     input.slug === '(legacy)' ? '/admin/api/profiles' : `/admin/api/${input.slug}/profiles`;
+
+  // Build client script per-render so we can embed the slug literal via
+  // JSON.stringify (which produces a safe JS string literal).
+  const clientScript = `
+  (function() {
+    const banner = document.getElementById('reload-banner');
+    const slug = ${JSON.stringify(input.slug)};
+    const es = new EventSource('/admin/events');
+    es.addEventListener('config-changed', function(ev) {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.slug !== slug && slug !== '(legacy)') return;
+      } catch (e) { /* fallback: show banner anyway */ }
+      if (banner) banner.classList.add('visible');
+    });
+
+    document.getElementById('reload-link').addEventListener('click', function(e) {
+      e.preventDefault();
+      window.location.reload();
+    });
+
+    document.body.addEventListener('click', function(ev) {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      const edit = target.closest('[data-edit-dialog]');
+      if (edit instanceof HTMLElement) {
+        const id = edit.dataset.editDialog;
+        const dialog = id ? document.getElementById('edit-dialog-' + id) : null;
+        if (dialog instanceof HTMLDialogElement) dialog.showModal();
+        return;
+      }
+
+      const opener = target.closest('[data-open-dialog]');
+      if (opener instanceof HTMLElement) {
+        const id = opener.dataset.openDialog;
+        const dialog = id ? document.getElementById(id) : null;
+        if (dialog instanceof HTMLDialogElement) dialog.showModal();
+        return;
+      }
+
+      const closer = target.closest('[data-dialog-close]');
+      if (closer instanceof HTMLElement) {
+        const dialog = closer.closest('dialog');
+        if (dialog instanceof HTMLDialogElement) dialog.close();
+      }
+    });
+
+    document.body.addEventListener('submit', async function(ev) {
+      const form = ev.target;
+      if (!(form instanceof HTMLFormElement)) return;
+      if (!form.dataset.api) return;
+      ev.preventDefault();
+      const method = form.dataset.method || 'POST';
+      const url = form.dataset.api;
+      let body = undefined;
+      if (method === 'POST' || method === 'PUT') {
+        const data = {};
+        for (const el of form.elements) {
+          if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) continue;
+          if (!el.name) continue;
+          if (el.name === 'claims') {
+            try { data[el.name] = el.value ? JSON.parse(el.value) : {}; }
+            catch (e) { alert('Invalid JSON in claims'); return; }
+          } else {
+            data[el.name] = el.value;
+          }
+        }
+        body = JSON.stringify(data);
+      }
+      const res = await fetch(url, {
+        method,
+        headers: body ? { 'content-type': 'application/json' } : {},
+        body,
+      });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        const err = await res.json().catch(function() { return { error: 'unknown' }; });
+        alert(err.error_description || err.details || err.error || 'Request failed');
+      }
+    });
+  })()
+`.trim();
+  // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
+  const safeClientScript = new Html(clientScript); // slug embedded via JSON.stringify — safe JS literal
+
   // The raw-config dump sits inside a <div> element body. Quotes are not
   // dangerous in element-text context, only in attribute values. Standard
   // escape would convert " to &quot;, which is correct but visually noisy
@@ -249,7 +257,7 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
         <div class="json">${safeJsonHtml}</div>
 
         <script>
-          ${SAFE_CLIENT_SCRIPT};
+          ${safeClientScript};
         </script>
       </body>
     </html>`;

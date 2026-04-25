@@ -61,6 +61,18 @@ describe('renderAdminPage', () => {
     expect(html).toContain('EventSource');
   });
 
+  it('embeds the slug literal in the SSE filter (legacy passes all events)', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    // JSON.stringify('(legacy)') → '"(legacy)"'
+    expect(html).toContain('"(legacy)"');
+    expect(html).toContain("slug !== '(legacy)'");
+  });
+
+  it('embeds the slug literal for a non-legacy slug', () => {
+    const html = renderAdminPage({ config: config(), slug: 'myapp' });
+    expect(html).toContain('"myapp"');
+  });
+
   it('renders Edit and Delete buttons side-by-side in a flex container (no details/summary)', () => {
     const html = renderAdminPage({ config: config(), slug: '(legacy)' });
     // Actions cell uses a flex container, NOT a native disclosure widget.
