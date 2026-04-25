@@ -40,7 +40,13 @@ export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): voi
     const unsubscribe = deps.emitter.subscribe(send);
 
     const keepalive = setInterval(() => {
-      reply.raw.write(': keepalive\n\n');
+      if (reply.raw.writableEnded) return;
+      try {
+        reply.raw.write(': keepalive\n\n');
+      } catch {
+        // Socket closed between writableEnded check and write — let the 'close'
+        // handler clean up the interval and subscription.
+      }
     }, 15_000);
 
     request.raw.on('close', () => {
