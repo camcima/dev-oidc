@@ -6,5 +6,9 @@ test-report.junit.xml
 .DS_Store
 .vscode
 .codex
+.claude
 .env
 .env.*
+
+# Skill iteration workspace — local test outputs and fixtures, not source.
+skills/dev-oidc-setup-workspace

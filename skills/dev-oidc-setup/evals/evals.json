@@ -1,0 +1,68 @@
+{
+  "skill_name": "dev-oidc-setup",
+  "evals": [
+    {
+      "id": 0,
+      "name": "wireup-compose-react-express-auth0",
+      "prompt": "Hey — we have a React frontend (Vite, port 5173) and a Node/Express API (port 4000) in this monorepo, and the whole thing runs locally via docker-compose. Right now the frontend hits our Auth0 tenant for login (see frontend/src/auth.ts) and the API verifies JWTs against Auth0's JWKS (see backend/src/jwt.ts). I'd like to swap out Auth0 for dev-oidc when running locally so I don't have to keep our shared Auth0 dev tenant alive. Set it up. Two test users would be enough — let's call them alice and bob, and please give bob a `role: admin` claim. Don't change the prod config; just make local dev go through dev-oidc.",
+      "expected_output": "A new dev-oidc.config.json at repo root with one client (clientId/audience/redirectUri matching what's in the app) and two profiles (alice + bob with admin claim). The config must NOT include `issuer`, `host`, or `port` — the v0.2 schema rejects them. A dev-oidc service block in docker-compose.yml or docker-compose.override.yml with the volume mount, port mapping, and healthcheck. Local-dev env variables (in .env.development or compose environment block) updated so OIDC_ISSUER/AUTHORITY points at http://localhost:8095. Production .env not modified.",
+      "files": ["fixtures/compose-react-express-auth0"],
+      "expectations": [
+        "dev-oidc.config.json exists at the working directory root",
+        "dev-oidc.config.json is valid JSON and parses cleanly under the v0.2 schema (no issuer/host/port fields)",
+        "config.clients[] has at least one entry whose redirectUris contains http://localhost:5173/auth/callback",
+        "config.profiles[] contains profiles with id 'alice' and id 'bob'",
+        "The 'bob' profile has a claims object with role equal to 'admin'",
+        "docker-compose.yml or docker-compose.override.yml has a service named 'dev-oidc' using a dev-oidc image",
+        "The dev-oidc service mounts dev-oidc.config.json into /config/config.json",
+        "The dev-oidc service exposes port 8095 to the host",
+        "The original .env file containing the Auth0 issuer (acme-dev.us.auth0.com) was not modified — production values are intact",
+        "A dev-only override exists (a new .env.development / .env.local file, or compose environment block changes) pointing the app's OIDC_ISSUER / VITE_OIDC_AUTHORITY at http://localhost:8095",
+        "frontend/src/auth.ts and backend/src/jwt.ts source files were not modified"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "wireup-vite-msal-no-docker",
+      "prompt": "I'm working on a Vite SPA that uses MSAL to sign in against our Entra tenant. There's no Docker in this project and I'd like to keep it that way — the rest of the team runs `npm run dev` and that's it. Can you wire up dev-oidc as the local IdP so I can test login flows offline? My backend reads `oid` from the JWT, not `sub`, so make sure that lines up.",
+      "expected_output": "A dev-oidc.config.json at repo root with subjectClaim 'oid', one client matching the MSAL configuration, and a couple of profiles. The config must NOT include `issuer`, `host`, or `port`. Run mode: either dev-oidc as a devDependency with a `dev:oidc` script (legacy CLI), or README/CONTRIBUTING documents Hub setup (`dev-oidc register . && dev-oidc start`). Dev env override (.env.local or .env.development) pointing the MSAL authority at the dev-oidc URL. src/authConfig.ts updated with `knownAuthorities` and `protocolMode: 'OIDC'` (MSAL refuses to talk to non-Microsoft authorities without these). No Docker artifacts introduced.",
+      "files": ["fixtures/vite-msal-no-docker"],
+      "expectations": [
+        "dev-oidc.config.json exists at the working directory root",
+        "dev-oidc.config.json is valid JSON and parses cleanly under the v0.2 schema (no issuer/host/port fields)",
+        "config.subjectClaim equals 'oid' (required for Entra/MSAL compatibility)",
+        "config.clients[] has at least one entry with a redirectUri matching http://localhost:5173/auth/callback",
+        "config.profiles[] has at least 2 profiles",
+        "Run mode wired: either package.json declares dev-oidc devDependency + a script that runs `dev-oidc start --config ...`, or README/CONTRIBUTING documents Hub setup with `dev-oidc register` and `dev-oidc start`",
+        "No docker-compose.yml or Dockerfile was created in the working directory",
+        "The original .env file (containing VITE_AZURE_AUTHORITY pointing at login.microsoftonline.com) was not modified",
+        "A dev-only override exists (e.g. .env.local or .env.development) pointing VITE_AZURE_AUTHORITY at the dev-oidc URL (http://localhost:8095 or http://localhost:8095/<slug>)",
+        "src/authConfig.ts has been updated to set `protocolMode: 'OIDC'` and add `knownAuthorities` containing the dev-oidc host (MSAL fails against non-Microsoft authorities without these)",
+        "src/main.tsx was not modified"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "edit-add-client-profile-persist-key",
+      "prompt": "We already have dev-oidc running fine for the main app. Two changes: (1) my teammate is building a separate admin portal at http://localhost:5180 — it needs its own client called `admin-portal` with audience `admin-api`, and it should require a client secret since it has a backend. (2) I'm getting tired of re-logging-in every time I rebuild the dev-oidc container — please make the signing key persistent. (3) Also add a profile `support-agent` (email support@acme.dev) with a claim `role: support` so we can test that user type.",
+      "expected_output": "Existing dev-oidc.config.json edited in place: a second client with clientId 'admin-portal', a clientSecret, redirectUris on http://localhost:5180, audience 'admin-api'. signingKey.source changed from 'generate' to 'file:<path>'. Compose file gets a /data volume mount paired with the keyfile path. New profile 'support-agent' with the requested email and role: support claim. No unrelated edits, and no introduction of issuer/host/port (which the v0.2 schema rejects).",
+      "files": ["fixtures/existing-dev-oidc"],
+      "expectations": [
+        "dev-oidc.config.json clients[] has exactly 2 entries (was 1)",
+        "There is a client with clientId 'admin-portal'",
+        "The 'admin-portal' client has audience 'admin-api'",
+        "The 'admin-portal' client has a non-empty clientSecret field",
+        "The 'admin-portal' client has at least one redirectUri starting with 'http://localhost:5180'",
+        "The original 'main-app' client is still present with its original clientId, redirectUris, and audience unchanged",
+        "signingKey.source starts with 'file:' (no longer 'generate')",
+        "docker-compose.yml has a volume mount on the dev-oidc service that backs the signing key path (typically a /data mount) — paired with either a named volume definition or a host bind mount",
+        "profiles[] has exactly 3 entries (was 2)",
+        "There is a profile with id 'support-agent'",
+        "The 'support-agent' profile has email 'support@acme.dev'",
+        "The 'support-agent' profile has a claims object with role equal to 'support'",
+        "The original 'alice' and 'bob' profiles are still present and unchanged",
+        "The edited config still contains no `issuer`, `host`, or `port` fields (rejected by v0.2 schema)"
+      ]
+    }
+  ]
+}
