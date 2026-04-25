@@ -42,7 +42,7 @@ This is a five-minute walkthrough to point an existing app's OIDC integration at
 
 ### 1. Run dev-oidc
 
-Pick one of the three run modes below (Docker, CLI, programmatic). All three read the same JSON config.
+Pick one of the run modes below (Hub, Docker, CLI, programmatic). All modes read the same project JSON config.
 
 ### 2. Point your app at it
 
@@ -67,7 +67,41 @@ The same code path runs in production — only the URLs change.
 
 ---
 
-## Run mode 1 — Docker (recommended for teams)
+## Run mode 1 — Hub (recommended for many projects)
+
+Run a single dev-oidc process that serves multiple project tenants concurrently. Each project keeps its own `dev-oidc.config.json` in its repo; a registry at `~/.config/dev-oidc/hub.json` tracks which projects are mounted.
+
+**Setup:**
+
+```bash
+npm install -g dev-oidc       # or run via npx
+dev-oidc register /path/to/your/project   # adds to hub.json
+dev-oidc start                # listens on 127.0.0.1:8095
+```
+
+Each tenant gets its own URL namespace:
+
+- Discovery: `http://localhost:8095/<slug>/.well-known/openid-configuration`
+- Authorize: `http://localhost:8095/<slug>/authorize`
+- Token: `http://localhost:8095/<slug>/token`
+- Admin: `http://localhost:8095/admin/<slug>`
+
+The Hub's dashboard at `http://localhost:8095/admin` lists all registered tenants.
+
+**Commands:**
+
+| Command                      | What it does                              |
+| ---------------------------- | ----------------------------------------- |
+| `dev-oidc start`             | Start the Hub.                            |
+| `dev-oidc register <path>`   | Mount a project's `dev-oidc.config.json`. |
+| `dev-oidc unregister <slug>` | Remove a tenant from the registry.        |
+| `dev-oidc list`              | List registered tenants.                  |
+
+The Hub watches `hub.json` — `register`/`unregister` take effect within ~200 ms with no restart.
+
+---
+
+## Run mode 2 — Docker (recommended for teams)
 
 ```bash
 docker run --rm -p 8095:8095 \
@@ -83,7 +117,7 @@ The image listens on port `8095` inside the container; map it to whatever you wa
 
 ---
 
-## Run mode 2 — docker-compose (recommended for projects)
+## Run mode 2b — docker-compose (recommended for projects)
 
 ```yaml
 # docker-compose.yml
@@ -121,17 +155,26 @@ volumes:
 
 - Use `http://dev-oidc:8095` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS.
 - Use `http://localhost:8095` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names.
-- Your dev-oidc config's `issuer` must match whichever URL the JWT's recipients expect. For apps where both browser and server code need to reach dev-oidc, `http://localhost:8095` is usually the right choice (browsers require it, servers can still reach it via the mapped port).
 - `"host": "0.0.0.0"` is required in the config so Fastify binds all interfaces inside the container.
 
 ---
 
-## Run mode 3 — CLI (programmatic testing, or no Docker)
+## Run mode 3 — Legacy single-tenant CLI
+
+Use this mode when you want a single isolated OIDC server for one project, without the Hub registry.
 
 ```bash
 npm install --save-dev dev-oidc
 npx dev-oidc start --config ./dev-oidc.config.json
 ```
+
+Optional flags:
+
+| Flag                 | Default     | Purpose                                           |
+| -------------------- | ----------- | ------------------------------------------------- |
+| `--port <number>`    | `8095`      | TCP port to listen on.                            |
+| `--host <address>`   | `127.0.0.1` | Address to bind.                                  |
+| `--public-url <url>` | derived     | Issuer base URL reported in discovery and tokens. |
 
 Or programmatically, e.g. in a Vitest `globalSetup`:
 
@@ -140,7 +183,7 @@ import { createDevOidcServer, loadConfig } from 'dev-oidc';
 
 const config = await loadConfig('./dev-oidc.config.json');
 const server = await createDevOidcServer({ config });
-await server.app.listen({ port: config.port, host: config.host });
+await server.app.listen({ port: 8095, host: '127.0.0.1' });
 ```
 
 ---
@@ -149,11 +192,10 @@ await server.app.listen({ port: config.port, host: config.host });
 
 Every field in `dev-oidc.config.json`:
 
+> **Hub mode vs Legacy mode:** In Hub mode, the listener address, port, and issuer base URL are owned by the Hub process (configured in `~/.config/dev-oidc/hub.json`). In Legacy single-tenant mode, pass `--port`, `--host`, and `--public-url` to `dev-oidc start --config <path>`. The project config file no longer accepts `issuer`, `port`, or `host` fields — configs that include them fail validation with a tailored error.
+
 ```jsonc
 {
-  "issuer": "http://localhost:8095", // Required. Base URL of this instance.
-  "port": 8095, // Default 8095. TCP port to listen on.
-  "host": "127.0.0.1", // Default 127.0.0.1. Use 0.0.0.0 in containers.
   "signingKey": {
     "kid": "dev-key-1", // Required. Key ID surfaced in JWKS + JWT header.
     "alg": "RS256", // Default "RS256". Also supports "ES256" — see Signing algorithm below.
@@ -328,7 +370,7 @@ From the login page itself, a small "Manage profiles →" link jumps to `/admin`
 ## Limitations
 
 - **Development only.** Not suitable for production use under any circumstances.
-- **Single tenant.** One issuer per instance.
+- **Single tenant per Docker container.** The Docker image runs in legacy single-tenant mode. Use Hub mode (CLI) for multi-tenant local development.
 - **In-memory session state.** Authorization codes (60 s TTL) and refresh tokens (8 h default) are held in memory. A server restart invalidates all active codes and refresh tokens. Persistent session storage is intentionally out of scope. Signing keys can be persisted across restarts via `signingKey.source: "file:<path>"` (see [Signing-key persistence](#signing-key-persistence)).
 - **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
 - **No authentication on `/admin`.**
