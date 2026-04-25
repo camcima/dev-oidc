@@ -38,6 +38,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const logger = options.logger ?? createLogger();
   const runtime = createRuntimeConfig(options.config);
   const eventsEmitter: EventsEmitter = createEventsEmitter();
+  runtime.onChange(() => eventsEmitter.emit({ type: 'config-changed' }));
   const keyMaterial = await createKeyMaterial(options.config.signingKey);
   const jwksDocument = buildJwks(keyMaterial);
   const codes = createCodeStore({
@@ -101,7 +102,6 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     watcher = await watchConfig(options.configFilePath, {
       onReload: (config) => {
         runtime.set(config);
-        eventsEmitter.emit({ type: 'config-changed' });
         logger.info({ issuer: config.issuer }, 'config reloaded');
       },
       onError: (err) => logger.warn({ err }, 'config reload failed; keeping previous config'),
