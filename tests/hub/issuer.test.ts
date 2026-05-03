@@ -3,6 +3,7 @@ import {
   computeIssuer,
   deriveDefaultPublicUrl,
   isBindAllHost,
+  pickRedirectHost,
   requirePublicUrlOrSafeHost,
 } from '@/hub/issuer.js';
 
@@ -57,6 +58,85 @@ describe('isBindAllHost', () => {
 
   it.each(['127.0.0.1', 'localhost', '::1', '192.168.1.10'])('does not flag %s', (host) => {
     expect(isBindAllHost(host)).toBe(false);
+  });
+});
+
+describe('pickRedirectHost', () => {
+  it('echoes the request Host when it matches the listen host:port', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: '127.0.0.1:8095',
+        publicUrl: undefined,
+        listenHost: '127.0.0.1',
+        listenPort: 8095,
+      }),
+    ).toBe('127.0.0.1:8095');
+  });
+
+  it('echoes the request Host when it matches the publicUrl host', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: 'idp.example.test:8095',
+        publicUrl: 'https://idp.example.test:8095',
+        listenHost: '0.0.0.0',
+        listenPort: 8095,
+      }),
+    ).toBe('idp.example.test:8095');
+  });
+
+  it('rejects an attacker-controlled Host header and falls back to publicUrl host', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: 'evil.example.com',
+        publicUrl: 'https://idp.example.test:8095',
+        listenHost: '127.0.0.1',
+        listenPort: 8095,
+      }),
+    ).toBe('idp.example.test:8095');
+  });
+
+  it('falls back to listenHost:listenPort when no publicUrl and Host is not allowlisted', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: 'evil.example.com',
+        publicUrl: undefined,
+        listenHost: '127.0.0.1',
+        listenPort: 8095,
+      }),
+    ).toBe('127.0.0.1:8095');
+  });
+
+  it('substitutes 127.0.0.1 when bound to 0.0.0.0 with no publicUrl', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: 'evil.example.com',
+        publicUrl: undefined,
+        listenHost: '0.0.0.0',
+        listenPort: 8095,
+      }),
+    ).toBe('127.0.0.1:8095');
+  });
+
+  it('handles an undefined Host header by falling back', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: undefined,
+        publicUrl: 'https://idp.example.test:8095',
+        listenHost: '127.0.0.1',
+        listenPort: 8095,
+      }),
+    ).toBe('idp.example.test:8095');
+  });
+
+  it('ignores an unparseable publicUrl gracefully', () => {
+    expect(
+      pickRedirectHost({
+        requestHost: 'evil.example.com',
+        publicUrl: 'not a url',
+        listenHost: '127.0.0.1',
+        listenPort: 8095,
+      }),
+    ).toBe('127.0.0.1:8095');
   });
 });
 

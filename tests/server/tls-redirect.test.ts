@@ -47,11 +47,66 @@ describe('TLS redirect hook', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/.well-known/openid-configuration',
-        headers: { host: 'localhost:8095' },
+        headers: { host: '127.0.0.1:8095' },
       });
       expect(response.statusCode).toBe(301);
       expect(response.headers.location).toBe(
-        'https://localhost:8095/.well-known/openid-configuration',
+        'https://127.0.0.1:8095/.well-known/openid-configuration',
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  it('rejects an attacker-controlled Host header and falls back to listen host:port', async () => {
+    const tls = {
+      cert: readFileSync(path.join(fixtureDir, 'cert.pem')),
+      key: readFileSync(path.join(fixtureDir, 'key.pem')),
+    };
+    const { app, close } = await createDevOidcServer({
+      config: minimalConfig,
+      tls,
+      listenHost: '127.0.0.1',
+      listenPort: 8095,
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/.well-known/openid-configuration',
+        headers: { host: 'evil.example.com' },
+      });
+      expect(response.statusCode).toBe(301);
+      expect(response.headers.location).toBe(
+        'https://127.0.0.1:8095/.well-known/openid-configuration',
+      );
+    } finally {
+      await close();
+    }
+  });
+
+  it('echoes a Host that matches the configured publicUrl host', async () => {
+    const tls = {
+      cert: readFileSync(path.join(fixtureDir, 'cert.pem')),
+      key: readFileSync(path.join(fixtureDir, 'key.pem')),
+    };
+    const { app, close } = await createDevOidcServer({
+      config: minimalConfig,
+      tls,
+      listenHost: '127.0.0.1',
+      listenPort: 8095,
+      publicUrl: 'https://idp.example.test:8095',
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/.well-known/openid-configuration',
+        headers: { host: 'idp.example.test:8095' },
+      });
+      expect(response.statusCode).toBe(301);
+      expect(response.headers.location).toBe(
+        'https://idp.example.test:8095/.well-known/openid-configuration',
       );
     } finally {
       await close();

@@ -11,7 +11,11 @@ import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
 import { createTenantRegistry, type TenantRegistry } from '@/hub/registry.js';
-import { deriveDefaultPublicUrl, requirePublicUrlOrSafeHost } from '@/hub/issuer.js';
+import {
+  deriveDefaultPublicUrl,
+  pickRedirectHost,
+  requirePublicUrlOrSafeHost,
+} from '@/hub/issuer.js';
 import { isReservedSlug, SLUG_REGEX, type HubConfig } from '@/hub/schema.js';
 import type { ActiveTenantState, ErrorTenantState, TenantState } from '@/hub/tenant-state.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
@@ -174,11 +178,16 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     app.addHook('onRequest', async (req, reply) => {
       const socket = req.socket as TLSSocket;
       if (!socket.encrypted) {
-        // `req.host` preserves the port from the Host header (e.g. `localhost:8095`),
-        // unlike `req.hostname` which strips it. We need the port in the redirect
-        // target so dev-oidc can redirect plain HTTP back onto the same multiplex
-        // port as HTTPS.
-        const target = `https://${req.host}${req.url}`;
+        // Don't echo arbitrary Host headers — `pickRedirectHost` validates
+        // against an allowlist (publicUrl host, listen host:port) before
+        // accepting `req.host`, falling back to a value dev-oidc owns.
+        const host = pickRedirectHost({
+          requestHost: req.host,
+          publicUrl: effectivePublicUrl,
+          listenHost: hubConfig.server.host,
+          listenPort: hubConfig.server.port,
+        });
+        const target = `https://${host}${req.url}`;
         await reply.code(301).header('Location', target).send();
       }
     });
