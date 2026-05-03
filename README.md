@@ -156,7 +156,7 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  camcima2/dev-oidc:latest
+  ghcr.io/camcima/dev-oidc:0.3.0
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -172,7 +172,7 @@ The image listens on port `8095` inside the container; map it to whatever you wa
 # docker-compose.yml
 services:
   dev-oidc:
-    image: camcima2/dev-oidc:latest
+    image: ghcr.io/camcima/dev-oidc:0.3.0
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
