@@ -138,10 +138,13 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
 
   const watcher: HubConfigWatcher = await watchHubConfig(options.hubConfigPath, {
     onReload: (cfg) => {
-      if (JSON.stringify(cfg.server.tls) !== JSON.stringify(hubConfig.server.tls)) {
+      // None of the `server.*` keys (host, port, publicUrl, tls) take effect
+      // without a process restart. Surface every change so an operator who
+      // tweaks them doesn't think hot-reload picked it up.
+      if (JSON.stringify(cfg.server) !== JSON.stringify(hubConfig.server)) {
         logger.warn(
-          { from: hubConfig.server.tls, to: cfg.server.tls },
-          'tls config changed; restart required for changes to take effect',
+          { from: hubConfig.server, to: cfg.server },
+          'server config changed; restart required for changes to take effect',
         );
       }
       registry
