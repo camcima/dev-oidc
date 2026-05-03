@@ -7,6 +7,7 @@ import httpolyglot from '@httptoolkit/httpolyglot';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
+import { expandTildePath } from '@/cli/legacy.js';
 import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
@@ -122,11 +123,15 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
   let tlsMaterial: TlsMaterial | undefined;
   if (hubConfig.server.tls !== undefined) {
     const tls = hubConfig.server.tls;
+    const resolveHubPath = (raw: string): string => {
+      const expanded = expandTildePath(raw);
+      return path.isAbsolute(expanded) ? expanded : path.resolve(hubConfigDir, expanded);
+    };
     const tlsConfig =
       tls.cert !== undefined && tls.key !== undefined
         ? {
-            cert: path.isAbsolute(tls.cert) ? tls.cert : path.resolve(hubConfigDir, tls.cert),
-            key: path.isAbsolute(tls.key) ? tls.key : path.resolve(hubConfigDir, tls.key),
+            cert: resolveHubPath(tls.cert),
+            key: resolveHubPath(tls.key),
           }
         : { hostnames: tls.hostnames };
     tlsMaterial = await loadTlsMaterial({

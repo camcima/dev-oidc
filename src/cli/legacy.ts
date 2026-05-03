@@ -28,6 +28,18 @@ function defaultCacheDir(): string {
   return path.join(root, 'dev-oidc', 'certs');
 }
 
+/**
+ * Expand a leading `~/` to the user's home directory. Node's `fs` does not
+ * interpret tildes (the shell normally does), so a path like
+ * `~/certs/dev-oidc.pem` typed into the CLI or hub.json would otherwise be
+ * read as a literal `./~/certs/dev-oidc.pem` and fail with ENOENT.
+ */
+export function expandTildePath(input: string): string {
+  if (input === '~') return os.homedir();
+  if (input.startsWith('~/')) return path.join(os.homedir(), input.slice(2));
+  return input;
+}
+
 function buildDefaultHostnames(input: { host: string; publicUrl?: string }): string[] {
   const set = new Set<string>([input.host, 'localhost']);
   if (input.publicUrl) {
@@ -49,15 +61,15 @@ export async function startLegacy(options: LegacyStartOptions): Promise<LegacySt
   let tlsMaterial: TlsMaterial | undefined;
   if (options.tls) {
     const cwd = process.cwd();
+    const resolveCliPath = (raw: string): string => {
+      const expanded = expandTildePath(raw);
+      return path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded);
+    };
     const tlsConfig =
       options.tls.mode === 'byo'
         ? {
-            cert: path.isAbsolute(options.tls.cert)
-              ? options.tls.cert
-              : path.resolve(cwd, options.tls.cert),
-            key: path.isAbsolute(options.tls.key)
-              ? options.tls.key
-              : path.resolve(cwd, options.tls.key),
+            cert: resolveCliPath(options.tls.cert),
+            key: resolveCliPath(options.tls.key),
           }
         : { hostnames: options.tls.hostnames };
     tlsMaterial = await loadTlsMaterial({
