@@ -1,9 +1,15 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import path from 'node:path';
+import os from 'node:os';
+import type { RequestListener, Server as HttpServer } from 'node:http';
+import type { TLSSocket } from 'node:tls';
+import httpolyglot from '@httptoolkit/httpolyglot';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
+import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
 import { createTenantRegistry, type TenantRegistry } from '@/hub/registry.js';
 import { deriveDefaultPublicUrl, requirePublicUrlOrSafeHost } from '@/hub/issuer.js';
 import { isReservedSlug, SLUG_REGEX, type HubConfig } from '@/hub/schema.js';
@@ -47,6 +53,25 @@ function resolveTenant(
   return { kind: 'ok', tenant };
 }
 
+function defaultCacheDir(): string {
+  const xdg = process.env.XDG_CACHE_HOME;
+  const root = xdg && xdg.trim().length > 0 ? xdg : path.join(os.homedir(), '.cache');
+  return path.join(root, 'dev-oidc', 'certs');
+}
+
+function defaultHostnames(host: string, publicUrl?: string): string[] {
+  const set = new Set<string>([host, 'localhost']);
+  if (publicUrl) {
+    try {
+      const u = new URL(publicUrl);
+      if (u.hostname) set.add(u.hostname);
+    } catch {
+      // ignore
+    }
+  }
+  return [...set];
+}
+
 function toDashboardTenant(t: TenantState): DashboardTenant {
   if (t.status === 'active') {
     return {
@@ -79,11 +104,36 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     hubConfig.server.publicUrl ??
     deriveDefaultPublicUrl({ host: hubConfig.server.host, port: hubConfig.server.port });
 
+  const hubConfigDir = path.dirname(path.resolve(options.hubConfigPath));
+  let tlsMaterial: TlsMaterial | undefined;
+  if (hubConfig.server.tls !== undefined) {
+    const tls = hubConfig.server.tls;
+    const tlsConfig =
+      tls.cert !== undefined && tls.key !== undefined
+        ? {
+            cert: path.isAbsolute(tls.cert) ? tls.cert : path.resolve(hubConfigDir, tls.cert),
+            key: path.isAbsolute(tls.key) ? tls.key : path.resolve(hubConfigDir, tls.key),
+          }
+        : { hostnames: tls.hostnames };
+    tlsMaterial = await loadTlsMaterial({
+      config: tlsConfig,
+      cacheDir: defaultCacheDir(),
+      defaultHostnames: defaultHostnames(hubConfig.server.host, hubConfig.server.publicUrl),
+    });
+    logger.info({ caroot: process.env.CAROOT ?? '(default)' }, 'TLS enabled for hub mode');
+  }
+
   const registry = createTenantRegistry({ publicUrl, logger });
   await registry.reconcile(hubConfig.tenants);
 
   const watcher: HubConfigWatcher = await watchHubConfig(options.hubConfigPath, {
     onReload: (cfg) => {
+      if (JSON.stringify(cfg.server.tls) !== JSON.stringify(hubConfig.server.tls)) {
+        logger.warn(
+          { from: hubConfig.server.tls, to: cfg.server.tls },
+          'tls config changed; restart required for changes to take effect',
+        );
+      }
       registry
         .reconcile(cfg.tenants)
         .catch((err: unknown) => logger.warn({ err }, 'reconcile failed'));
@@ -91,7 +141,35 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     onError: (err) => logger.warn({ err }, 'hub config reload failed'),
   });
 
-  const app = Fastify({ loggerInstance: logger });
+  // httpolyglot.createServer returns a net.Server that proxies HTTP/HTTPS/HTTP2
+  // requests through the same handler. Fastify's serverFactory expects an
+  // http.Server-shaped value; the multiplexer is structurally compatible at
+  // runtime (it forwards request/response events), so we narrow with a cast and
+  // pin Fastify's RawServer generic to http.Server to match.
+  const app = Fastify<HttpServer>({
+    loggerInstance: logger,
+    ...(tlsMaterial && {
+      serverFactory: (handler: RequestListener): HttpServer =>
+        httpolyglot.createServer(
+          { tls: { cert: tlsMaterial.cert, key: tlsMaterial.key } },
+          handler,
+        ) as unknown as HttpServer,
+    }),
+  });
+
+  if (tlsMaterial) {
+    app.addHook('onRequest', async (req, reply) => {
+      const socket = req.socket as TLSSocket;
+      if (!socket.encrypted) {
+        // `req.host` preserves the port from the Host header (e.g. `localhost:8095`),
+        // unlike `req.hostname` which strips it. We need the port in the redirect
+        // target so dev-oidc can redirect plain HTTP back onto the same multiplex
+        // port as HTTPS.
+        const target = `https://${req.host}${req.url}`;
+        await reply.code(301).header('Location', target).send();
+      }
+    });
+  }
   registerAdminGuard(app, {
     allowedHosts: buildAdminAllowedHosts({
       listenHost: hubConfig.server.host,
