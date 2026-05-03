@@ -101,18 +101,23 @@ function toDashboardTenant(t: TenantState): DashboardTenant {
 export async function createHubServer(options: CreateHubServerOptions): Promise<HubServer> {
   const logger = options.logger ?? createLogger();
   const hubConfig = await loadHubConfig(options.hubConfigPath);
-  // hub.json's `server.publicUrl` is authoritative; fall back to
-  // DEV_OIDC_PUBLIC_URL so the published Docker image can boot the hub
-  // mode against `0.0.0.0` without an explicit hub.json entry.
-  const envPublicUrl = process.env.DEV_OIDC_PUBLIC_URL?.trim() || undefined;
-  const effectivePublicUrl = hubConfig.server.publicUrl ?? envPublicUrl;
+  // In hub mode, `hub.json`'s `server.publicUrl` is the only source of truth.
+  // We deliberately do NOT consult DEV_OIDC_PUBLIC_URL here:
+  //   - The published Docker image sets DEV_OIDC_PUBLIC_URL=http://localhost:8095
+  //     so the *legacy* default CMD boots out of the box.
+  //   - Reading that env var here would override the scheme-aware default
+  //     when `server.tls` is set without `server.publicUrl`, advertising an
+  //     `http://` issuer for an HTTPS listener — a regression of CHANGELOG
+  //     0.3.1's TLS issuer fix. Hub operators put `server.publicUrl` in
+  //     hub.json instead.
+  const configPublicUrl = hubConfig.server.publicUrl;
   requirePublicUrlOrSafeHost({
     host: hubConfig.server.host,
-    publicUrl: effectivePublicUrl,
+    publicUrl: configPublicUrl,
   });
   const tlsEnabled = hubConfig.server.tls !== undefined;
   const publicUrl =
-    effectivePublicUrl ??
+    configPublicUrl ??
     deriveDefaultPublicUrl({
       host: hubConfig.server.host,
       port: hubConfig.server.port,
@@ -137,7 +142,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     tlsMaterial = await loadTlsMaterial({
       config: tlsConfig,
       cacheDir: defaultCacheDir(),
-      defaultHostnames: defaultHostnames(hubConfig.server.host, effectivePublicUrl),
+      defaultHostnames: defaultHostnames(hubConfig.server.host, configPublicUrl),
     });
     logger.info({ caroot: process.env.CAROOT ?? '(default)' }, 'TLS enabled for hub mode');
   }
@@ -188,7 +193,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
         // accepting `req.host`, falling back to a value dev-oidc owns.
         const host = pickRedirectHost({
           requestHost: req.host,
-          publicUrl: effectivePublicUrl,
+          publicUrl: configPublicUrl,
           listenHost: hubConfig.server.host,
           listenPort: hubConfig.server.port,
         });
@@ -201,7 +206,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     allowedHosts: buildAdminAllowedHosts({
       listenHost: hubConfig.server.host,
       listenPort: hubConfig.server.port,
-      publicUrl: effectivePublicUrl,
+      publicUrl: configPublicUrl,
     }),
   });
   await app.register(cors, {

@@ -178,6 +178,13 @@ services:
       - dev-oidc-data:/data
     ports:
       - '8095:8095'
+    environment:
+      # Override the image's default `http://localhost:8095` so the issuer
+      # advertised in discovery matches the URL `your-api` actually calls
+      # over the compose network. Without this, your-api validates JWTs
+      # against `http://dev-oidc:8095` but the `iss` claim is
+      # `http://localhost:8095` — issuer mismatch, every request fails.
+      DEV_OIDC_PUBLIC_URL: http://dev-oidc:8095
     healthcheck:
       test:
         - CMD-SHELL
@@ -202,10 +209,10 @@ volumes:
 
 **Important notes:**
 
-- Use `http://dev-oidc:8095` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS.
-- Use `http://localhost:8095` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names.
+- Use `http://dev-oidc:8095` (the compose service name) for **server-to-server** calls between containers on the shared Docker network — for example, your API validating JWTs by fetching JWKS. The `DEV_OIDC_PUBLIC_URL` env on the dev-oidc service ensures the issuer claim in the discovery doc and JWTs matches that.
+- Use `http://localhost:8095` for **browser-side** redirects and token calls — the user's browser doesn't resolve Docker service names. Pick whichever URL the majority of clients use as the issuer; for SPA + browser flows, set `DEV_OIDC_PUBLIC_URL: http://localhost:8095` (the image default) and have your-api validate against that same URL.
 - The image's default `CMD` already passes `--host 0.0.0.0` so the published port is reachable from the host. The project config no longer accepts `host`/`port` fields — both are CLI/Hub concerns now.
-- If your relying parties resolve dev-oidc through a name other than `localhost` (e.g. `dev-oidc` on the compose network), pass `--public-url http://dev-oidc:8095` so the issuer in discovery and JWTs matches the URL the RPs will use to fetch JWKS.
+- `--public-url` on the CLI overrides `DEV_OIDC_PUBLIC_URL` if you'd rather pass it explicitly via `command:`.
 
 ---
 

@@ -179,6 +179,51 @@ describe('integration: hub mode auth-code flow', () => {
     }
   });
 
+  it('derives an https:// issuer even when DEV_OIDC_PUBLIC_URL=http://... is set', async () => {
+    // Regression test for the published Docker image leaking its legacy-mode
+    // env-var default into hub mode: the image sets
+    // DEV_OIDC_PUBLIC_URL=http://localhost:8095 so the *legacy* default CMD
+    // boots out of the box, but if hub mode read that env var, an HTTPS
+    // listener with no `server.publicUrl` in hub.json would advertise an
+    // `http://` issuer to relying parties.
+    const originalEnv = process.env.DEV_OIDC_PUBLIC_URL;
+    process.env.DEV_OIDC_PUBLIC_URL = 'http://localhost:8095';
+    try {
+      const cfg = tmpProjectConfig();
+      const fixturesDir = path.resolve(__dirname, '..', 'fixtures', 'tls');
+      const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-tls-env-'));
+      const hubCfg = path.join(dir, 'hub.json');
+      writeFileSync(
+        hubCfg,
+        JSON.stringify({
+          version: '1',
+          server: {
+            port: 8095,
+            host: '127.0.0.1',
+            tls: {
+              cert: path.join(fixturesDir, 'cert.pem'),
+              key: path.join(fixturesDir, 'key.pem'),
+            },
+          },
+          tenants: [{ slug: 'app', configPath: cfg, enabled: true }],
+        }),
+      );
+      const server = await createHubServer({ hubConfigPath: hubCfg });
+      try {
+        const tenant = server.registry.get('app');
+        expect(tenant?.status).toBe('active');
+        if (tenant?.status === 'active') {
+          expect(tenant.issuer).toBe('https://127.0.0.1:8095/app');
+        }
+      } finally {
+        await server.close();
+      }
+    } finally {
+      if (originalEnv === undefined) delete process.env.DEV_OIDC_PUBLIC_URL;
+      else process.env.DEV_OIDC_PUBLIC_URL = originalEnv;
+    }
+  });
+
   it('rejects a malformed slug with 404', async () => {
     const hubCfg = tmpHubConfig([]);
     const server = await createHubServer({ hubConfigPath: hubCfg });
