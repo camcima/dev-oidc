@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "server": {
+    "port": 8095,
+    "host": "0.0.0.0",
+    "publicUrl": "https://dev-oidc.localhost:8095",
+
+    "//": "TLS — uncomment ONE of the four valid forms below.",
+    "//tls-absent": "Omit `tls` entirely for HTTP (v0.2 behavior).",
+    "//tls-auto-default": "{} — auto-mkcert with default hostnames [host, 'localhost'].",
+    "//tls-auto-explicit": "{ \"hostnames\": [\"dev-oidc.localhost\", \"localhost\"] } — auto-mkcert, explicit SANs.",
+    "//tls-byo": "{ \"cert\": \"./certs/cert.pem\", \"key\": \"./certs/key.pem\" } — BYO mode; paths relative to this file.",
+
+    "tls": {
+      "hostnames": ["dev-oidc.localhost", "localhost"]
+    }
+  },
+  "tenants": []
+}
