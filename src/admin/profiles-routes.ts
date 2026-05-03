@@ -73,6 +73,18 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
       if (idx < 0) {
         return reply.code(404).send({ error: 'not_found' });
       }
+      // A body.id that differs from the URL :id is a rename. Allow it only
+      // when the new id doesn't already belong to another profile —
+      // otherwise the write would produce two profiles with identical ids
+      // and break the POST handler's uniqueness invariant.
+      if (profile.id !== request.params.id) {
+        const collides = current.profiles.some((p, i) => i !== idx && p.id === profile.id);
+        if (collides) {
+          return reply
+            .code(409)
+            .send({ error: 'conflict', error_description: 'profile id already exists' });
+        }
+      }
       const nextProfiles = [...current.profiles];
       nextProfiles[idx] = profile;
       const next = { ...current, profiles: nextProfiles };

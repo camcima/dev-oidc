@@ -131,6 +131,52 @@ describe('admin profiles routes', () => {
     await app.close();
   });
 
+  it('PUT /admin/api/profiles/:id allows renaming when the new id is free', async () => {
+    const { app, file } = await buildApp();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/admin/api/profiles/alice',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        id: 'alice-renamed',
+        displayName: 'Alice',
+        email: 'alice@example.com',
+      }),
+    });
+    expect(res.statusCode).toBe(200);
+    const disk = JSON.parse(readFileSync(file, 'utf8'));
+    expect(disk.profiles.map((p: { id: string }) => p.id)).toEqual(['alice-renamed']);
+    await app.close();
+  });
+
+  it('PUT /admin/api/profiles/:id rejects rename that collides with an existing id', async () => {
+    const { app, file } = await buildApp();
+    // Add a second profile so we have a collision target.
+    await app.inject({
+      method: 'POST',
+      url: '/admin/api/profiles',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({ id: 'bob', displayName: 'Bob', email: 'bob@x.com' }),
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/admin/api/profiles/alice',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        id: 'bob', // collides with the existing 'bob' profile
+        displayName: 'Alice',
+        email: 'alice@example.com',
+      }),
+    });
+    expect(res.statusCode).toBe(409);
+    // Disk must be unchanged from the post-POST state (alice + bob, both
+    // with their original ids).
+    const disk = JSON.parse(readFileSync(file, 'utf8'));
+    expect(disk.profiles.map((p: { id: string }) => p.id).sort()).toEqual(['alice', 'bob']);
+    await app.close();
+  });
+
   it('PUT /admin/api/profiles/:id returns 404 for unknown id', async () => {
     const { app } = await buildApp();
     const res = await app.inject({
