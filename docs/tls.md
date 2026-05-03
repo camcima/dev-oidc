@@ -45,7 +45,7 @@ The published image bundles `mkcert`. Mount your host's mkcert root into the con
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.0
+    image: ghcr.io/camcima/dev-oidc:0.3.1
     ports:
       - '8095:8095'
     volumes:

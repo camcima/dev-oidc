@@ -133,7 +133,7 @@ Compose snippet (Linux/WSL):
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.0
+    image: ghcr.io/camcima/dev-oidc:0.3.1
     ports:
       - '8095:8095'
     volumes:
@@ -156,13 +156,13 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:0.3.0
+  ghcr.io/camcima/dev-oidc:0.3.1
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
 - `/data` — optional persistent volume for the signing key (see [Signing-key persistence](#signing-key-persistence)).
 
-The image listens on port `8095` inside the container; map it to whatever you want on the host.
+The image listens on port `8095` inside the container. If you map it to a different host port (e.g. `-p 9000:8095`), pass `-e DEV_OIDC_PUBLIC_URL=http://localhost:9000` so the issuer dev-oidc advertises in discovery matches the URL relying parties actually call. The image's default `DEV_OIDC_PUBLIC_URL=http://localhost:8095` only fits the `8095:8095` mapping.
 
 ---
 
@@ -172,7 +172,7 @@ The image listens on port `8095` inside the container; map it to whatever you wa
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.0
+    image: ghcr.io/camcima/dev-oidc:0.3.1
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data

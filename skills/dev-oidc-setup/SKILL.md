@@ -165,7 +165,7 @@ TLS flags (v0.3+):
 ```bash
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
-  ghcr.io/camcima/dev-oidc:0.3.0
+  ghcr.io/camcima/dev-oidc:0.3.1
 ```
 
 Document the command somewhere durable (project README's local-dev section, a `scripts/dev-oidc.sh`, etc.). Don't invent a new docs structure if one exists.
@@ -264,7 +264,7 @@ Append this service to an existing `docker-compose.yml` (or place it in `docker-
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.0
+    image: ghcr.io/camcima/dev-oidc:0.3.1
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       # - dev-oidc-data:/data        # Uncomment if signingKey.source is "file:/data/..."
@@ -299,7 +299,7 @@ Same shape as above, but mount the host's mkcert state and pass `--tls`. Browser
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.0
+    image: ghcr.io/camcima/dev-oidc:0.3.1
     ports:
       - '8095:8095'
     volumes:

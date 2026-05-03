@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Standardized Docker image references in README and the `dev-oidc-setup` skill on `ghcr.io/camcima/dev-oidc:0.3.0`. Earlier snippets pointed at a non-existent `camcima2/dev-oidc:latest` tag on Docker Hub.
+- Standardized Docker image references in README, `docs/tls.md`, and the `dev-oidc-setup` skill on `ghcr.io/camcima/dev-oidc:0.3.1` (the version that ships these fixes). Earlier snippets pointed at a non-existent `camcima2/dev-oidc:latest` tag on Docker Hub.
 - Replaced relative documentation links in `README.md` with absolute `github.com/camcima/dev-oidc/...` URLs so they keep working when the README is rendered on npmjs.com (the npm tarball only ships `dist/`, `README.md`, and `LICENSE`).
 
 ### CI
