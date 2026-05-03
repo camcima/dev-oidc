@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { startLegacy } from '@/cli/legacy.js';
+import { startLegacy, type LegacyStartOptions } from '@/cli/legacy.js';
 import { runList, runRegister, runUnregister } from '@/cli/hub-commands.js';
 import { defaultHubConfigPath } from '@/hub/loader.js';
 import { createLogger } from '@/logger.js';
+import { TlsConfigurationError } from '@/server/tls-loader.js';
 
 const HELP = [
   'dev-oidc — a minimal OIDC provider for local development',
@@ -129,15 +130,44 @@ async function runStart(
       process.stderr.write('dev-oidc: --port must be a valid port number\n');
       process.exit(1);
     }
+
+    const tlsCert = typeof values['tls-cert'] === 'string' ? values['tls-cert'] : undefined;
+    const tlsKey = typeof values['tls-key'] === 'string' ? values['tls-key'] : undefined;
+    const tlsHostnames = Array.isArray(values['tls-hostname'])
+      ? (values['tls-hostname'] as string[])
+      : undefined;
+    const tlsFlag = values.tls === true;
+
+    if ((tlsCert && !tlsKey) || (tlsKey && !tlsCert)) {
+      process.stderr.write(
+        'dev-oidc: --tls-cert and --tls-key must be paired (both set or both omitted)\n',
+      );
+      process.exit(2);
+    }
+    if (tlsCert && tlsKey && tlsHostnames !== undefined) {
+      process.stderr.write(
+        'dev-oidc: --tls-hostname is only valid in auto-mkcert mode (when --tls-cert/--tls-key are not set)\n',
+      );
+      process.exit(2);
+    }
+
+    const tls: LegacyStartOptions['tls'] | undefined =
+      tlsCert && tlsKey
+        ? { mode: 'byo', cert: tlsCert, key: tlsKey }
+        : tlsFlag || tlsHostnames !== undefined
+          ? { mode: 'auto', hostnames: tlsHostnames }
+          : undefined;
+
     const result = await startLegacy({
       configPath: values.config,
       port,
       host,
       publicUrl,
       logger,
+      tls,
     });
     logger.info(
-      { issuer: result.issuer, port: result.port, host: result.host },
+      { issuer: result.issuer, port: result.port, host: result.host, tls: tls !== undefined },
       'dev-oidc listening (legacy)',
     );
     setupShutdown(result.server.close, logger);
@@ -176,6 +206,10 @@ function setupShutdown(close: () => Promise<void>, logger: ReturnType<typeof cre
 
 main().catch((err: unknown) => {
   const logger = createLogger();
+  if (err instanceof TlsConfigurationError) {
+    process.stderr.write(`${err.message}\n`);
+    process.exit(2);
+  }
   // `runStart` (legacy + hub) is the only path that can throw past `main()`
   // — register/unregister/list always return a CommandResult. Anything that
   // gets here is a server-startup failure.
