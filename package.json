@@ -1,6 +1,6 @@
 {
   "name": "dev-oidc",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A minimal, config-driven OIDC provider for local development.",
   "keywords": [
     "auth",

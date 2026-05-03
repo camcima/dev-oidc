@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+## [0.3.1] - 2026-05-03
+
+### Fixed
+
+- **Default Docker container starts out of the box again.** 0.3.0 bound to `0.0.0.0` by default but did not set a publicUrl, tripping the bind-all safety guard and refusing to start. The image now ships `ENV DEV_OIDC_PUBLIC_URL=http://localhost:8095` (override at runtime when needed) and `ENV XDG_CACHE_HOME=/data` so the auto-mkcert leaf cache persists alongside the signing key. The CLI also falls back to `DEV_OIDC_PUBLIC_URL` when `--public-url` is omitted.
+- **Hub mode derives `https://` issuers when TLS is enabled.** Previously, a hub config with `server.tls` set but `server.publicUrl` omitted produced an `http://` issuer, which relying parties would reject as a scheme mismatch. The default now follows TLS state.
+- **HTTPS redirect target is allowlisted.** The HTTP→HTTPS `onRequest` hook validated nothing before echoing `req.host` into the `Location` header. A forged `Host: evil.example.com` would bounce clients off-site (open-redirect-shaped). The redirect now only echoes hosts matching the configured publicUrl or listen host:port; other hosts fall back to a value dev-oidc owns.
+- **Hub watcher warns on any `server.*` change.** Previously only TLS section changes surfaced; tweaking `host`, `port`, or `publicUrl` looked silently applied even though none take effect without a restart.
+- **`PUT /admin/api/profiles/:id` rejects rename collisions.** When `body.id` differed from the URL `:id` and matched another existing profile, the write produced two profiles with identical ids. Now returns `409 Conflict` with the same error shape `POST` emits.
+- **TLS cert/key paths support `~/`.** docs claimed tilde expansion worked; Node's `fs` does not interpret tildes, so `~/certs/dev-oidc.pem` failed with ENOENT. Both CLI flags and `hub.json` paths now expand `~/` to `os.homedir()` before resolution.
+- **Discriminated TLS error taxonomy.** `findMkcert` previously collapsed "binary missing" and "CAROOT not initialized" into a single `null` return, mapping both to `MKCERT_NOT_FOUND`. Now returns a discriminated result so the loader emits `MKCERT_NOT_FOUND` vs. `CAROOT_NOT_INITIALIZED` (with the resolved CAROOT in the message) vs. `INVALID_HOSTNAMES` for empty hostname arrays.
+
+### Changed
+
+- Standardized Docker image references in README and the `dev-oidc-setup` skill on `ghcr.io/camcima/dev-oidc:0.3.0`. Earlier snippets pointed at a non-existent `camcima2/dev-oidc:latest` tag on Docker Hub.
+- Replaced relative documentation links in `README.md` with absolute `github.com/camcima/dev-oidc/...` URLs so they keep working when the README is rendered on npmjs.com (the npm tarball only ships `dist/`, `README.md`, and `LICENSE`).
+
+### CI
+
+- The `docker` job now `docker run`s the built image and probes `/.well-known/openid-configuration` — catches "image refuses to start out of the box" regressions before publish.
+- `vitest` `testTimeout` raised from the 5s default to 15s. The CLI suite resets its module cache and re-imports the entire server graph per test; under full-suite load that occasionally exceeded 5s on cold cache.
+
 ## [0.3.0] - 2026-05-03
 
 ### Added
