@@ -119,3 +119,86 @@ describe('HubConfigSchema', () => {
     expect(RESERVED_SLUGS).toContain('admin');
   });
 });
+
+describe('ServerSchema.tls', () => {
+  const validBase = {
+    version: '1' as const,
+    server: { port: 8095, host: '127.0.0.1' },
+    tenants: [],
+  };
+
+  it('accepts an absent tls block (HTTP mode)', () => {
+    const result = HubConfigSchema.safeParse(validBase);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.server.tls).toBeUndefined();
+  });
+
+  it('accepts an empty tls object (auto-mkcert with default hostnames)', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: {} },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts tls.hostnames (auto-mkcert with explicit SANs)', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: { hostnames: ['dev-oidc.localhost', 'localhost'] } },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts tls.cert + tls.key (BYO mode)', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: { cert: '/p/cert.pem', key: '/p/key.pem' } },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects tls.cert without tls.key', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: { cert: '/p/cert.pem' } },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /both be set or both omitted/.test(i.message))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects tls.key without tls.cert', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: { key: '/p/key.pem' } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects tls.hostnames combined with tls.cert+key (mode exclusion)', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: {
+        ...validBase.server,
+        tls: { cert: '/p/cert.pem', key: '/p/key.pem', hostnames: ['localhost'] },
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) => /only valid in auto-mkcert mode/.test(i.message)),
+      ).toBe(true);
+    }
+  });
+
+  it('rejects an empty hostnames array', () => {
+    const result = HubConfigSchema.safeParse({
+      ...validBase,
+      server: { ...validBase.server, tls: { hostnames: [''] } },
+    });
+    expect(result.success).toBe(false);
+  });
+});

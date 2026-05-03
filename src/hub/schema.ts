@@ -32,10 +32,34 @@ const TenantEntrySchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+const TlsSchema = z
+  .object({
+    hostnames: z.array(z.string().min(1)).optional(),
+    cert: z.string().min(1).optional(),
+    key: z.string().min(1).optional(),
+  })
+  .superRefine((v, ctx) => {
+    if (Boolean(v.cert) !== Boolean(v.key)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [],
+        message: 'tls.cert and tls.key must both be set or both omitted',
+      });
+    }
+    if ((v.cert || v.key) && v.hostnames !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['hostnames'],
+        message: 'tls.hostnames is only valid in auto-mkcert mode (when cert/key are not set)',
+      });
+    }
+  });
+
 const ServerSchema = z.object({
   port: z.number().int().positive().default(8095),
   host: z.string().default('127.0.0.1'),
   publicUrl: z.string().url().optional(),
+  tls: TlsSchema.optional(),
 });
 
 export const HubConfigSchema = z
@@ -60,3 +84,4 @@ export const HubConfigSchema = z
 
 export type HubConfig = z.infer<typeof HubConfigSchema>;
 export type HubTenantEntry = z.infer<typeof TenantEntrySchema>;
+export type Tls = z.infer<typeof TlsSchema>;
