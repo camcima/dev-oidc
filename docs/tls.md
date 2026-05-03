@@ -40,7 +40,7 @@ dev-oidc start --config dev-oidc.config.json --tls --tls-hostname dev-oidc.local
 
 ## Docker
 
-The published image bundles `mkcert`. Mount your host's mkcert root into the container so leaves are signed by the same root your browser already trusts:
+The published image bundles `mkcert`. Mount your host's mkcert root into the container so leaves are signed by the same root your browser already trusts. The CAROOT volume is also what makes the cert fingerprint stable across `docker compose down` / `up`: the cert cache lives in `/data` (already volume-mounted), but CAROOT lives at `~/.local/share/mkcert` — without a host mount, the container regenerates the CA on every recreate and the cached leaf no longer chains to it.
 
 ```yaml
 services:
@@ -154,6 +154,14 @@ Most likely a CAROOT mismatch. dev-oidc's startup log includes the resolved CARO
 - In Docker, ensure the volume mount points at the correct host CAROOT.
 
 A common footgun: running `sudo mkcert -install` installs the root into `/root/.local/share/mkcert/`, not your user CAROOT. Rerun without sudo.
+
+### Cert fingerprint changes after `docker compose down` / `up`
+
+Symptom: browser warns "Your connection is not private" with `NET::ERR_CERT_AUTHORITY_INVALID` after recreating the container, even though it worked before. Or `curl` reports `unable to get local issuer certificate` against a CA you previously trusted.
+
+Cause: the cert cache survives in `/data` (volume-mounted), but CAROOT at `~/.local/share/mkcert` is in the container's writable layer. On `down`/`up` (vs. `restart`), CAROOT regenerates → fresh CA → cached leaf no longer chains to it.
+
+Fix: mount your host CAROOT into the container as shown in the [Docker](#docker) section. With the mount in place, both the cert cache and the CA persist, and the fingerprint stays stable.
 
 ### Port already in use
 
