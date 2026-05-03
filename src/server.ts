@@ -136,7 +136,11 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     app.addHook('onRequest', async (req, reply) => {
       const socket = req.socket as TLSSocket;
       if (!socket.encrypted) {
-        const target = `https://${req.hostname}${req.url}`;
+        // `req.host` preserves the port from the Host header (e.g. `localhost:8095`),
+        // unlike `req.hostname` which strips it. We need the port in the redirect
+        // target so dev-oidc can redirect plain HTTP back onto the same multiplex
+        // port as HTTPS.
+        const target = `https://${req.host}${req.url}`;
         await reply.code(301).header('Location', target).send();
       }
     });
