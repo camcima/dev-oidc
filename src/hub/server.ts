@@ -96,13 +96,18 @@ function toDashboardTenant(t: TenantState): DashboardTenant {
 export async function createHubServer(options: CreateHubServerOptions): Promise<HubServer> {
   const logger = options.logger ?? createLogger();
   const hubConfig = await loadHubConfig(options.hubConfigPath);
+  // hub.json's `server.publicUrl` is authoritative; fall back to
+  // DEV_OIDC_PUBLIC_URL so the published Docker image can boot the hub
+  // mode against `0.0.0.0` without an explicit hub.json entry.
+  const envPublicUrl = process.env.DEV_OIDC_PUBLIC_URL?.trim() || undefined;
+  const effectivePublicUrl = hubConfig.server.publicUrl ?? envPublicUrl;
   requirePublicUrlOrSafeHost({
     host: hubConfig.server.host,
-    publicUrl: hubConfig.server.publicUrl,
+    publicUrl: effectivePublicUrl,
   });
   const tlsEnabled = hubConfig.server.tls !== undefined;
   const publicUrl =
-    hubConfig.server.publicUrl ??
+    effectivePublicUrl ??
     deriveDefaultPublicUrl({
       host: hubConfig.server.host,
       port: hubConfig.server.port,
@@ -123,7 +128,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     tlsMaterial = await loadTlsMaterial({
       config: tlsConfig,
       cacheDir: defaultCacheDir(),
-      defaultHostnames: defaultHostnames(hubConfig.server.host, hubConfig.server.publicUrl),
+      defaultHostnames: defaultHostnames(hubConfig.server.host, effectivePublicUrl),
     });
     logger.info({ caroot: process.env.CAROOT ?? '(default)' }, 'TLS enabled for hub mode');
   }
@@ -179,7 +184,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     allowedHosts: buildAdminAllowedHosts({
       listenHost: hubConfig.server.host,
       listenPort: hubConfig.server.port,
-      publicUrl: hubConfig.server.publicUrl,
+      publicUrl: effectivePublicUrl,
     }),
   });
   await app.register(cors, {

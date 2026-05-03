@@ -20,6 +20,7 @@ const HELP = [
   '      --port <number>      Listen port (default 8095).',
   '      --host <ip>          Listen host (default 127.0.0.1).',
   '      --public-url <url>   Issuer URL advertised in discovery (default http://host:port).',
+  '                           Falls back to DEV_OIDC_PUBLIC_URL if the flag is omitted.',
   '',
   'TLS options (legacy mode; mirror server.tls in hub.json for hub mode):',
   '      --tls                  Enable HTTPS with auto-mkcert provisioning.',
@@ -125,7 +126,13 @@ async function runStart(
     const portRaw = typeof values.port === 'string' ? values.port : '8095';
     const port = Number.parseInt(portRaw, 10);
     const host = typeof values.host === 'string' ? values.host : '127.0.0.1';
-    const publicUrl = typeof values['public-url'] === 'string' ? values['public-url'] : undefined;
+    // --public-url has the highest priority. Fall back to DEV_OIDC_PUBLIC_URL
+    // so the published Docker image (which sets that env var to a sane
+    // default) can boot with `--host 0.0.0.0` without an explicit flag.
+    const publicUrl =
+      typeof values['public-url'] === 'string'
+        ? values['public-url']
+        : process.env.DEV_OIDC_PUBLIC_URL?.trim() || undefined;
     if (!Number.isFinite(port) || port < 0 || port > 65535) {
       process.stderr.write('dev-oidc: --port must be a valid port number\n');
       process.exit(1);

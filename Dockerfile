@@ -10,6 +10,17 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# Default issuer URL when the operator hasn't passed --public-url explicitly.
+# `--host 0.0.0.0` (in CMD) requires an explicit publicUrl, so without this
+# env var the default container would refuse to start. Override at runtime
+# (e.g. `-e DEV_OIDC_PUBLIC_URL=https://idp.example.com:8443`) when relying
+# parties resolve dev-oidc through a different name than 0.0.0.0.
+ENV DEV_OIDC_PUBLIC_URL=http://localhost:8095
+# Auto-mkcert provisioning caches leaf certs at $XDG_CACHE_HOME/dev-oidc/certs.
+# Anchoring it to /data ensures the cache persists when an operator mounts a
+# volume at /data (the documented signing-key persistence path), so cert
+# fingerprints stay stable across `docker compose down` / `up`.
+ENV XDG_CACHE_HOME=/data
 
 # mkcert is used for auto-provisioning TLS certs at startup. It reads the
 # user's CAROOT (mounted from the host at /home/node/.local/share/mkcert)
@@ -35,9 +46,10 @@ RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 
 EXPOSE 8095
-# Bind to 0.0.0.0 so the published port is reachable from the host. Override
-# --public-url at run time (e.g. `-e DEV_OIDC_PUBLIC_URL=http://host.docker.internal:8095 ...`)
-# if relying parties resolve dev-oidc through a different name than they
-# advertise via OIDC discovery.
+# Bind to 0.0.0.0 so the published port is reachable from the host. The CLI
+# refuses to start when binding bind-all without an explicit publicUrl, so
+# `DEV_OIDC_PUBLIC_URL` (set above) provides the default issuer URL. Override
+# either env var or pass `--public-url` to CMD when integrating with a
+# different name.
 ENTRYPOINT ["node", "dist/cli.js"]
 CMD ["start", "--config", "/config/config.json", "--host", "0.0.0.0"]
