@@ -17,6 +17,14 @@ dev-oidc 0.2 introduced **Hub mode** as the default run mode. Three implications
 
 If you encounter a `dev-oidc.config.json` from v0.1.x that has those three fields, removing them is part of any edit.
 
+### v0.3 changes
+
+1. **`server.tls`** is a new optional block in `hub.json` that enables HTTPS. Three valid auto-mkcert shapes (`{}` / `{ hostnames: [...] }`) plus BYO mode (`{ cert, key }`).
+2. **Legacy CLI gains four flags**: `--tls`, `--tls-hostname` (repeatable), `--tls-cert`, `--tls-key`.
+3. **URLs that consumers paste into MSAL / passport-azure-ad / oidc-client-ts config should be `https://...`** when TLS is enabled — typically `https://dev-oidc.localhost:8095` (with the SAN added to `/etc/hosts`) or `https://localhost:8095` (with `localhost` in the SAN list).
+4. **Docker compose wire-ups should mount the host's mkcert state** so the container signs leaves with the user's already-trusted root: `${HOME}/.local/share/mkcert:/home/node/.local/share/mkcert:ro` (Linux/WSL) or `${HOME}/Library/Application Support/mkcert:/home/node/.local/share/mkcert:ro` (macOS).
+5. **Project `dev-oidc.config.json` containing a top-level `tls` field fails Zod validation** with a tailored message pointing at `hub.server.tls`. Strip it as part of any v0.3 wire-up edit.
+
 ## Decision: wire-up or edit?
 
 Before doing anything, look at the cwd:
@@ -109,6 +117,20 @@ Other Hub commands worth knowing:
 
 The Hub watches `hub.json` (~200 ms debounce) — register/unregister take effect with no restart.
 
+A typical `~/.config/dev-oidc/hub.json` looks like this (the `tls: {}` line is the v0.3+ opt-in for HTTPS):
+
+```json
+{
+  "server": {
+    "port": 8095,
+    "host": "0.0.0.0",
+    "publicUrl": "https://dev-oidc.localhost:8095",
+    "tls": {}
+  },
+  "tenants": []
+}
+```
+
 When you choose Hub mode, **edit a durable file** in the repo so the next contributor finds the commands. Append a "Local IdP" subsection to `README.md` (or `CONTRIBUTING.md`, or whatever local-dev doc the project already keeps) containing the three commands literally — `dev-oidc register …`, `dev-oidc start`, and the slug you chose. Hub mode has no `package.json` script and no compose service, so if you don't write the commands down, the only place they exist is your reply, which the user will lose. Treat this as part of the wire-up, not a "nice to have".
 
 #### Legacy CLI (single project, no Docker, no Hub)
@@ -128,6 +150,15 @@ Install dev-oidc as a devDependency and add a script:
 ```
 
 Optional flags: `--port <number>`, `--host <ip>`, `--public-url <url>`. `--public-url` replaces the v0.1 `issuer` config field — pass it whenever relying parties reach dev-oidc through a name other than the listen host.
+
+TLS flags (v0.3+):
+
+| Flag                    | Purpose                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------- |
+| `--tls`                 | Enable HTTPS with auto-mkcert. Implies same-port HTTP→HTTPS redirect.                  |
+| `--tls-hostname <host>` | Append a SAN to auto-mkcert mode. Repeatable. Implies `--tls`.                         |
+| `--tls-cert <path>`     | BYO cert file (absolute path; CWD-relative also accepted). Must pair with `--tls-key`. |
+| `--tls-key <path>`      | BYO key file. Must pair with `--tls-cert`.                                             |
 
 #### Bare Docker
 
@@ -150,13 +181,21 @@ Locate the file the app reads OIDC config from in development. Common locations:
 | `OIDC_AUDIENCE`           | matches `clients[].audience`                                                | matches `clients[].audience`                                         |
 | Redirect URI              | matches `clients[].redirectUris[]` exactly                                  | matches `clients[].redirectUris[]` exactly                           |
 
+When TLS is enabled (v0.3+), swap every `http://...` URL above for `https://...`. The recommended hostname is `https://dev-oidc.localhost:8095` (added to `/etc/hosts` as `127.0.0.1 dev-oidc.localhost`) or `https://localhost:8095` (provided `localhost` is in the SAN list). Examples:
+
+- **passport-azure-ad** — `identityMetadata: 'https://dev-oidc.localhost:8095/.well-known/openid-configuration'` (without TLS: `http://localhost:8095/...`).
+- **MSAL** — `authority: 'https://dev-oidc.localhost:8095'` and `knownAuthorities: ['dev-oidc.localhost:8095']` (without TLS: `http://localhost:8095` / `localhost:8095`).
+- **oidc-client-ts** — `authority: 'https://dev-oidc.localhost:8095'` (without TLS: `http://localhost:8095`).
+- **passport-openidconnect** — `issuer: 'https://dev-oidc.localhost:8095'` (without TLS: `http://localhost:8095`).
+
 In Hub mode, every OIDC URL gains the `/<slug>/` prefix:
 
-- Discovery: `http://localhost:8095/<slug>/.well-known/openid-configuration`
-- Authorize: `http://localhost:8095/<slug>/authorize`
-- Token: `http://localhost:8095/<slug>/token`
-- JWKS: `http://localhost:8095/<slug>/.well-known/jwks.json`
-- Per-tenant admin: `http://localhost:8095/admin/<slug>`
+- Discovery (HTTP): `http://localhost:8095/<slug>/.well-known/openid-configuration`
+- Discovery (HTTPS, v0.3+): `https://dev-oidc.localhost:8095/<slug>/.well-known/openid-configuration`
+- Authorize: `http(s)://<host>:8095/<slug>/authorize`
+- Token: `http(s)://<host>:8095/<slug>/token`
+- JWKS: `http(s)://<host>:8095/<slug>/.well-known/jwks.json`
+- Per-tenant admin: `http(s)://<host>:8095/admin/<slug>`
 
 In legacy / Docker (compose) mode, drop the `/<slug>/` segment everywhere — the URLs match v0.1 exactly.
 
@@ -253,6 +292,38 @@ services:
 
 The image already passes `--host 0.0.0.0` in its default `CMD`, so the published port is reachable from the host without any flag in the compose file. If relying parties reach dev-oidc by a name other than `localhost` (e.g. `dev-oidc` on the compose network), set `command: ["start", "--config", "/config/config.json", "--public-url", "http://dev-oidc:8095"]` so discovery and JWT `iss` reflect that URL.
 
+### With TLS (recommended for v0.3+)
+
+Same shape as above, but mount the host's mkcert state and pass `--tls`. Browsers trust the leaves automatically because the leaf is signed by the user's already-installed mkcert root.
+
+```yaml
+services:
+  dev-oidc:
+    image: ghcr.io/camcima/dev-oidc:0.3.0
+    ports:
+      - '8095:8095'
+    volumes:
+      - ./dev-oidc.config.json:/config/config.json:ro
+      - ./hub.json:/config/hub.json:ro
+      - dev-oidc-data:/data
+      # Linux/WSL:
+      - ${HOME}/.local/share/mkcert:/home/node/.local/share/mkcert:ro
+      # macOS: replace the line above with:
+      # - ${HOME}/Library/Application Support/mkcert:/home/node/.local/share/mkcert:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'wget --no-check-certificate -q -O- https://127.0.0.1:8095/.well-known/openid-configuration > /dev/null || exit 1'
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  dev-oidc-data:
+```
+
+For Hub mode set `tls: { hostnames: ["dev-oidc.localhost", "localhost"] }` in `hub.json`. For legacy mode pass `--tls` (auto-mkcert) or `--tls-cert ./certs/cert.pem --tls-key ./certs/key.pem` (BYO) in the container `command`. Add `127.0.0.1 dev-oidc.localhost` to `/etc/hosts` so the SAN resolves locally.
+
 ## Edit recipes
 
 ### Add a profile (test user / login tile)
@@ -345,6 +416,7 @@ The profile's `id` still lands in `sub`; this just _adds_ an `oid` alias so back
 
 ```ts
 import { createDevOidcServer, loadConfig } from 'dev-oidc';
+// import { readFileSync } from 'node:fs';
 
 const config = await loadConfig('./dev-oidc.config.json');
 const server = await createDevOidcServer({
@@ -352,6 +424,10 @@ const server = await createDevOidcServer({
   listenHost: '127.0.0.1',
   listenPort: 8095,
   // issuer: 'http://localhost:8095',   // Optional. Derived from listenHost/listenPort if omitted.
+  // tls: {                              // v0.3+: enable HTTPS via @httptoolkit/httpolyglot multiplex.
+  //   cert: readFileSync('./certs/cert.pem'),
+  //   key:  readFileSync('./certs/key.pem'),
+  // },
 });
 await server.app.listen({ port: 8095, host: '127.0.0.1' });
 ```
@@ -366,6 +442,7 @@ await server.app.listen({ port: 8095, host: '127.0.0.1' });
 - **Signing key rotates on every restart by default.** The `source: "generate"` default creates a fresh keypair at boot — fine for one-shot tests, disruptive during interactive dev because every restart invalidates JWTs in browser storage and breaks the API's cached JWKS until it refetches. Recommend `source: "file:..."` whenever the user complains about random 401s after restarts.
 - **No auth on `/admin`.** The default `127.0.0.1` bind is the only protection. Flag this if the user expresses any intent to expose dev-oidc beyond loopback. dev-oidc is a development tool, not a production service.
 - **No `issuer`/`port`/`host` in project config.** v0.2 rejects them. If the user pastes a v0.1 config snippet, drop those three lines before saving.
+- **`tls` at the top level of project `dev-oidc.config.json`** — v0.3 rejects this with a Zod error pointing at `hub.server.tls`. Strip it; if the project genuinely needs TLS, it belongs in `hub.json` (or via legacy `--tls*` flags), never in the project config.
 
 ## MSAL gotcha: `knownAuthorities` + `protocolMode`
 
