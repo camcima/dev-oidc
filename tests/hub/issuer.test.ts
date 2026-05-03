@@ -33,8 +33,20 @@ describe('computeIssuer', () => {
 });
 
 describe('deriveDefaultPublicUrl', () => {
-  it('returns http://host:port', () => {
+  it('returns http://host:port when tls is not enabled', () => {
     expect(deriveDefaultPublicUrl({ host: '127.0.0.1', port: 8095 })).toBe('http://127.0.0.1:8095');
+  });
+
+  it('returns http://host:port when tlsEnabled is explicitly false', () => {
+    expect(deriveDefaultPublicUrl({ host: '127.0.0.1', port: 8095, tlsEnabled: false })).toBe(
+      'http://127.0.0.1:8095',
+    );
+  });
+
+  it('returns https://host:port when tlsEnabled is true', () => {
+    expect(deriveDefaultPublicUrl({ host: '127.0.0.1', port: 8095, tlsEnabled: true })).toBe(
+      'https://127.0.0.1:8095',
+    );
   });
 });
 

@@ -100,9 +100,14 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     host: hubConfig.server.host,
     publicUrl: hubConfig.server.publicUrl,
   });
+  const tlsEnabled = hubConfig.server.tls !== undefined;
   const publicUrl =
     hubConfig.server.publicUrl ??
-    deriveDefaultPublicUrl({ host: hubConfig.server.host, port: hubConfig.server.port });
+    deriveDefaultPublicUrl({
+      host: hubConfig.server.host,
+      port: hubConfig.server.port,
+      tlsEnabled,
+    });
 
   const hubConfigDir = path.dirname(path.resolve(options.hubConfigPath));
   let tlsMaterial: TlsMaterial | undefined;

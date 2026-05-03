@@ -12,8 +12,13 @@ export function isBindAllHost(host: string): boolean {
   return BIND_ALL_HOSTS.has(host);
 }
 
-export function deriveDefaultPublicUrl(input: { host: string; port: number }): string {
-  return `http://${input.host}:${input.port}`;
+export function deriveDefaultPublicUrl(input: {
+  host: string;
+  port: number;
+  tlsEnabled?: boolean;
+}): string {
+  const scheme = input.tlsEnabled ? 'https' : 'http';
+  return `${scheme}://${input.host}:${input.port}`;
 }
 
 /**

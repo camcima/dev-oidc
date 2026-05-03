@@ -142,6 +142,43 @@ describe('integration: hub mode auth-code flow', () => {
     }
   });
 
+  it('derives an https:// issuer when server.tls is set and server.publicUrl is omitted', async () => {
+    const cfg = tmpProjectConfig();
+    const fixturesDir = path.resolve(__dirname, '..', 'fixtures', 'tls');
+    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-tls-'));
+    const hubCfg = path.join(dir, 'hub.json');
+    writeFileSync(
+      hubCfg,
+      JSON.stringify({
+        version: '1',
+        // No publicUrl — the test asserts the default scheme follows tls.
+        server: {
+          port: 8095,
+          host: '127.0.0.1',
+          tls: {
+            cert: path.join(fixturesDir, 'cert.pem'),
+            key: path.join(fixturesDir, 'key.pem'),
+          },
+        },
+        tenants: [{ slug: 'app', configPath: cfg, enabled: true }],
+      }),
+    );
+    const server = await createHubServer({ hubConfigPath: hubCfg });
+    try {
+      // app.inject() goes through the onRequest redirect hook (plain "HTTP"
+      // socket), so we can't hit /.well-known/discovery directly. Assert on
+      // the tenant registry's resolved issuer instead — that's what the
+      // discovery doc would render.
+      const tenant = server.registry.get('app');
+      expect(tenant?.status).toBe('active');
+      if (tenant?.status === 'active') {
+        expect(tenant.issuer).toBe('https://127.0.0.1:8095/app');
+      }
+    } finally {
+      await server.close();
+    }
+  });
+
   it('rejects a malformed slug with 404', async () => {
     const hubCfg = tmpHubConfig([]);
     const server = await createHubServer({ hubConfigPath: hubCfg });

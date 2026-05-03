@@ -163,7 +163,13 @@ export async function runList(options: ListOptions): Promise<CommandResult> {
   if (hub.tenants.length === 0) {
     return { exitCode: 0, stdout: 'No tenants registered.\n' };
   }
-  const publicUrl = hub.server.publicUrl ?? deriveDefaultPublicUrl(hub.server);
+  const publicUrl =
+    hub.server.publicUrl ??
+    deriveDefaultPublicUrl({
+      host: hub.server.host,
+      port: hub.server.port,
+      tlsEnabled: hub.server.tls !== undefined,
+    });
   const lines = ['SLUG\tENABLED\tISSUER\tPATH'];
   for (const t of hub.tenants) {
     const issuer = computeIssuer({ publicUrl, slug: t.slug });
