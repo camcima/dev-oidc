@@ -47,3 +47,34 @@ jobs:
           context: .
           push: false
           tags: dev-oidc:ci
+          # `load: true` puts the image into the local docker daemon so the
+          # subsequent `docker run` step can use it. Without this, the image
+          # only lives in buildx's cache and `docker run` fails to find it.
+          load: true
+      - name: Boot smoke test (catches "image refuses to start out of the box")
+        # Run the image with no extra flags — the same way a first-time user
+        # would. CMD already binds 0.0.0.0; ENV DEV_OIDC_PUBLIC_URL fills in
+        # the issuer so requirePublicUrlOrSafeHost doesn't refuse to start.
+        # If either default ever regresses, this step fails before publish.
+        run: |
+          set -euo pipefail
+          docker run -d --name dev-oidc-smoke \
+            -p 8095:8095 \
+            -v "$(pwd)/examples/config.json:/config/config.json:ro" \
+            dev-oidc:ci
+          # Poll the discovery endpoint instead of sleeping a fixed duration —
+          # fast on a warm container, generous on a cold one.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8095/.well-known/openid-configuration \
+              | grep -q '"issuer"'; then
+              echo "boot smoke test OK"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "smoke test failed — discovery never became reachable"
+          docker logs dev-oidc-smoke || true
+          exit 1
+      - name: Tear down smoke container
+        if: always()
+        run: docker rm -f dev-oidc-smoke || true
