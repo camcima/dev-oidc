@@ -11,6 +11,20 @@ export interface MkcertHandle {
   caroot: string;
 }
 
+/**
+ * Discriminated result of locating a usable mkcert installation. Returning
+ * a tagged union (vs. `null`) lets the tls-loader emit a precise error code:
+ *   - `not-found` → mkcert binary not on PATH (suggest install).
+ *   - `caroot-uninitialized` → mkcert is installed but `mkcert -install` has
+ *     not been run yet (suggest `mkcert -install`). Includes the resolved
+ *     CAROOT for the error message.
+ *   - `ok` → handle ready to use.
+ */
+export type FindMkcertResult =
+  | { ok: true; handle: MkcertHandle }
+  | { ok: false; kind: 'not-found' }
+  | { ok: false; kind: 'caroot-uninitialized'; caroot: string };
+
 export interface EnsureCertPairArgs {
   mkcert: MkcertHandle;
   cacheDir: string;
@@ -43,16 +57,16 @@ async function resolveCAROOT(binary: string): Promise<string> {
   return stdout.trim();
 }
 
-export async function findMkcert(): Promise<MkcertHandle | null> {
+export async function findMkcert(): Promise<FindMkcertResult> {
   const binary = await whichMkcert();
-  if (!binary) return null;
+  if (!binary) return { ok: false, kind: 'not-found' };
   const caroot = await resolveCAROOT(binary);
   try {
     await access(path.join(caroot, 'rootCA.pem'));
   } catch {
-    return null;
+    return { ok: false, kind: 'caroot-uninitialized', caroot };
   }
-  return { binary, caroot };
+  return { ok: true, handle: { binary, caroot } };
 }
 
 function cacheKeyFor(hostnames: string[]): string {

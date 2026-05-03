@@ -94,7 +94,10 @@ describe('loadTlsMaterial', () => {
 
   describe('auto-mkcert mode', () => {
     it('returns cert/key buffers when mkcert is available', async () => {
-      vi.mocked(findMkcert).mockResolvedValueOnce({ binary: '/usr/bin/mkcert', caroot: '/c' });
+      vi.mocked(findMkcert).mockResolvedValueOnce({
+        ok: true,
+        handle: { binary: '/usr/bin/mkcert', caroot: '/c' },
+      });
       vi.mocked(ensureCertPair).mockResolvedValueOnce({
         certPath: '/cache/abc.pem',
         keyPath: '/cache/abc-key.pem',
@@ -120,7 +123,10 @@ describe('loadTlsMaterial', () => {
     });
 
     it('uses defaultHostnames when config.hostnames is omitted', async () => {
-      vi.mocked(findMkcert).mockResolvedValueOnce({ binary: '/usr/bin/mkcert', caroot: '/c' });
+      vi.mocked(findMkcert).mockResolvedValueOnce({
+        ok: true,
+        handle: { binary: '/usr/bin/mkcert', caroot: '/c' },
+      });
       vi.mocked(ensureCertPair).mockResolvedValueOnce({
         certPath: '/cache/x.pem',
         keyPath: '/cache/x-key.pem',
@@ -140,8 +146,8 @@ describe('loadTlsMaterial', () => {
       ]);
     });
 
-    it('throws MKCERT_NOT_FOUND when findMkcert returns null due to missing binary', async () => {
-      vi.mocked(findMkcert).mockResolvedValueOnce(null);
+    it('throws MKCERT_NOT_FOUND when findMkcert reports the binary is missing', async () => {
+      vi.mocked(findMkcert).mockResolvedValueOnce({ ok: false, kind: 'not-found' });
 
       try {
         await loadTlsMaterial({
@@ -154,6 +160,49 @@ describe('loadTlsMaterial', () => {
         expect(err).toBeInstanceOf(TlsConfigurationError);
         expect((err as TlsConfigurationError).code).toBe('MKCERT_NOT_FOUND');
         expect((err as Error).message).toMatch(/Install from .*mkcert/);
+      }
+    });
+
+    it('throws CAROOT_NOT_INITIALIZED when mkcert is installed but root CA is missing', async () => {
+      vi.mocked(findMkcert).mockResolvedValueOnce({
+        ok: false,
+        kind: 'caroot-uninitialized',
+        caroot: '/home/test/.local/share/mkcert',
+      });
+
+      try {
+        await loadTlsMaterial({
+          config: {},
+          cacheDir: '/cache',
+          defaultHostnames: ['localhost'],
+        });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(TlsConfigurationError);
+        expect((err as TlsConfigurationError).code).toBe('CAROOT_NOT_INITIALIZED');
+        // The error message must include the resolved CAROOT so the operator
+        // knows which directory to point `mkcert -install` at.
+        expect((err as Error).message).toMatch(/\/home\/test\/\.local\/share\/mkcert/);
+        expect((err as Error).message).toMatch(/mkcert -install/);
+      }
+    });
+
+    it('throws INVALID_HOSTNAMES when neither config.hostnames nor defaultHostnames provide one', async () => {
+      vi.mocked(findMkcert).mockResolvedValueOnce({
+        ok: true,
+        handle: { binary: '/usr/bin/mkcert', caroot: '/c' },
+      });
+
+      try {
+        await loadTlsMaterial({
+          config: {},
+          cacheDir: '/cache',
+          defaultHostnames: [],
+        });
+        expect.fail('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(TlsConfigurationError);
+        expect((err as TlsConfigurationError).code).toBe('INVALID_HOSTNAMES');
       }
     });
   });

@@ -52,7 +52,7 @@ describe('findMkcert', () => {
     vi.resetAllMocks();
   });
 
-  it('returns null when mkcert binary is not in PATH', async () => {
+  it('returns { ok: false, kind: "not-found" } when mkcert binary is not in PATH', async () => {
     vi.mocked(execFile).mockImplementation(((_cmd: string, _args: string[], cb: ExecFileCb) => {
       // simulate `which mkcert` failing
       cb(Object.assign(new Error('not found'), { code: 'ENOENT' }));
@@ -60,10 +60,10 @@ describe('findMkcert', () => {
     }) as unknown as typeof execFile);
 
     const result = await findMkcert();
-    expect(result).toBeNull();
+    expect(result).toEqual({ ok: false, kind: 'not-found' });
   });
 
-  it('returns a handle when mkcert is available and CAROOT/rootCA.pem exists', async () => {
+  it('returns { ok: true, handle } when mkcert is available and CAROOT/rootCA.pem exists', async () => {
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], cb: ExecFileCb) => {
       // first call resolves `which mkcert` (or equivalent); second resolves -CAROOT
       if (cmd.endsWith('which') || cmd.endsWith('where.exe')) {
@@ -78,12 +78,14 @@ describe('findMkcert', () => {
     vi.mocked(access).mockResolvedValueOnce(undefined); // rootCA.pem exists
 
     const result = await findMkcert();
-    expect(result).not.toBeNull();
-    expect(result?.binary).toBe('/usr/bin/mkcert');
-    expect(result?.caroot).toBe('/home/test/.local/share/mkcert');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.handle.binary).toBe('/usr/bin/mkcert');
+      expect(result.handle.caroot).toBe('/home/test/.local/share/mkcert');
+    }
   });
 
-  it('returns null when mkcert is in PATH but rootCA.pem is missing (CAROOT not initialized)', async () => {
+  it('returns { ok: false, kind: "caroot-uninitialized", caroot } when rootCA.pem is missing', async () => {
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], cb: ExecFileCb) => {
       if (cmd.endsWith('which') || cmd.endsWith('where.exe')) {
         cb(null, { stdout: '/usr/bin/mkcert\n', stderr: '' });
@@ -97,7 +99,11 @@ describe('findMkcert', () => {
     vi.mocked(access).mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
     const result = await findMkcert();
-    expect(result).toBeNull();
+    expect(result).toEqual({
+      ok: false,
+      kind: 'caroot-uninitialized',
+      caroot: '/home/test/.local/share/mkcert',
+    });
   });
 
   it('honors $CAROOT env var when set, skipping `mkcert -CAROOT`', async () => {
@@ -116,7 +122,10 @@ describe('findMkcert', () => {
       vi.mocked(access).mockResolvedValueOnce(undefined);
 
       const result = await findMkcert();
-      expect(result?.caroot).toBe('/custom/caroot');
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.handle.caroot).toBe('/custom/caroot');
+      }
     } finally {
       if (oldCaroot === undefined) delete process.env.CAROOT;
       else process.env.CAROOT = oldCaroot;
