@@ -10,6 +10,20 @@ RUN npm run build
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+# mkcert is used for auto-provisioning TLS certs at startup. It reads the
+# user's CAROOT (mounted from the host at /home/node/.local/share/mkcert)
+# and signs leaves for the configured hostnames. Alpine 3.23 has no apk
+# package for mkcert, so we download the official release binary. Pinned
+# version, multi-arch via TARGETARCH (linux/amd64 + linux/arm64). ~5MB.
+ARG TARGETARCH
+ARG MKCERT_VERSION=v1.4.4
+RUN apk add --no-cache ca-certificates && \
+    wget -qO /usr/local/bin/mkcert \
+      "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-${TARGETARCH}" && \
+    chmod +x /usr/local/bin/mkcert && \
+    /usr/local/bin/mkcert -version 2>/dev/null || /usr/local/bin/mkcert --help >/dev/null
+
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY --from=builder /app/dist ./dist
