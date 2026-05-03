@@ -108,6 +108,48 @@ The Hub watches `hub.json` — `register`/`unregister` take effect within ~200 m
 
 ---
 
+## TLS / HTTPS
+
+dev-oidc serves HTTPS automatically when you enable it. The Docker image bundles `mkcert` so leaves are signed by your existing host CA — browsers trust them automatically once you've run `mkcert -install` once on your host.
+
+Minimal `hub.json`:
+
+```json
+{
+  "server": {
+    "port": 8095,
+    "host": "0.0.0.0",
+    "publicUrl": "https://dev-oidc.localhost:8095",
+    "tls": {
+      "hostnames": ["dev-oidc.localhost", "localhost"]
+    }
+  },
+  "tenants": []
+}
+```
+
+Compose snippet (Linux/WSL):
+
+```yaml
+services:
+  dev-oidc:
+    image: ghcr.io/camcima/dev-oidc:0.3.0
+    ports:
+      - '8095:8095'
+    volumes:
+      - ./hub.json:/config/hub.json:ro
+      - dev-oidc-data:/data
+      - ${HOME}/.local/share/mkcert:/home/node/.local/share/mkcert:ro
+    command: [start, --hub-config, /config/hub.json]
+
+volumes:
+  dev-oidc-data:
+```
+
+Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.com/httptoolkit/httpolyglot): plain `http://...` requests get `301`'d to `https://...` automatically. See [docs/tls.md](docs/tls.md) for the full feature reference, BYO mode, troubleshooting, and per-OS volume mount paths.
+
+---
+
 ## Run mode 2 — Docker (recommended for teams)
 
 ```bash
@@ -188,6 +230,7 @@ Or programmatically, e.g. in a Vitest `globalSetup`:
 
 ```ts
 import { createDevOidcServer, loadConfig } from 'dev-oidc';
+// import { readFileSync } from 'node:fs';
 
 const config = await loadConfig('./dev-oidc.config.json');
 const server = await createDevOidcServer({
@@ -198,6 +241,13 @@ const server = await createDevOidcServer({
   // issuer: 'http://localhost:8095',
   listenHost: '127.0.0.1',
   listenPort: 8095,
+  // v0.3+: Optional. When set, serves HTTPS via @httptoolkit/httpolyglot
+  // multiplex (same-port HTTP→HTTPS redirect included). Both Buffers must
+  // be PEM-formatted.
+  // tls: {
+  //   cert: readFileSync('./certs/cert.pem'),
+  //   key:  readFileSync('./certs/key.pem'),
+  // },
 });
 await server.app.listen({ port: 8095, host: '127.0.0.1' });
 ```
