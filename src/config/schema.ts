@@ -69,10 +69,24 @@ export const ConfigSchema = ConfigBodySchema.passthrough().superRefine((value, c
         'host no longer belongs in project config; set hub.server.host in hub.json (or pass `--host` for legacy mode)',
     });
   }
+  if ('tls' in raw) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['tls'],
+      message:
+        'tls no longer belongs in project config; set hub.server.tls in hub.json (or pass `--tls`/`--tls-cert` for legacy mode)',
+    });
+  }
 
   // Reject any other unrecognized keys (strict-like behaviour for all other unknown fields).
   for (const key of Object.keys(raw)) {
-    if (!KNOWN_KEYS.has(key) && key !== 'issuer' && key !== 'port' && key !== 'host') {
+    if (
+      !KNOWN_KEYS.has(key) &&
+      key !== 'issuer' &&
+      key !== 'port' &&
+      key !== 'host' &&
+      key !== 'tls'
+    ) {
       ctx.addIssue({
         code: 'unrecognized_keys',
         keys: [key],

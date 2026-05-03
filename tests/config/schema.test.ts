@@ -123,3 +123,27 @@ describe('ConfigSchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('Project ConfigSchema rejects misplaced TLS', () => {
+  it('rejects a top-level tls field with the tailored message', () => {
+    const result = ConfigSchema.safeParse({
+      signingKey: { kid: 'k1' },
+      clients: [
+        {
+          clientId: 'app',
+          redirectUris: ['http://localhost:5173/auth/callback'],
+          audience: 'api',
+        },
+      ],
+      tls: { hostnames: ['localhost'] },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) =>
+          /tls no longer belongs in project config; set hub\.server\.tls/.test(i.message),
+        ),
+      ).toBe(true);
+    }
+  });
+});
