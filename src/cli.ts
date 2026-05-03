@@ -20,6 +20,12 @@ const HELP = [
   '      --host <ip>          Listen host (default 127.0.0.1).',
   '      --public-url <url>   Issuer URL advertised in discovery (default http://host:port).',
   '',
+  'TLS options (legacy mode; mirror server.tls in hub.json for hub mode):',
+  '      --tls                  Enable HTTPS with auto-mkcert provisioning.',
+  '      --tls-hostname <host>  Append a SAN; repeatable. Implies --tls.',
+  '      --tls-cert <path>      BYO cert file (absolute path). Must pair with --tls-key. Implies --tls.',
+  '      --tls-key <path>       BYO key file (absolute path). Must pair with --tls-cert.',
+  '',
   'Hub options (run without --config):',
   '      --hub-config <path>  Hub config path (default ~/.config/dev-oidc/hub.json).',
   '',
@@ -40,6 +46,10 @@ async function main(): Promise<void> {
       slug: { type: 'string' },
       json: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
+      tls: { type: 'boolean' },
+      'tls-cert': { type: 'string' },
+      'tls-key': { type: 'string' },
+      'tls-hostname': { type: 'string', multiple: true },
     },
   });
 
@@ -102,7 +112,7 @@ async function main(): Promise<void> {
 }
 
 async function runStart(
-  values: Record<string, string | boolean | undefined>,
+  values: Record<string, string | boolean | string[] | undefined>,
   _positionals: string[],
 ): Promise<void> {
   const logger = createLogger();
