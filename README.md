@@ -146,7 +146,7 @@ volumes:
   dev-oidc-data:
 ```
 
-Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.com/httptoolkit/httpolyglot): plain `http://...` requests get `301`'d to `https://...` automatically. See [docs/tls.md](docs/tls.md) for the full feature reference, BYO mode, troubleshooting, and per-OS volume mount paths.
+Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.com/httptoolkit/httpolyglot): plain `http://...` requests get `301`'d to `https://...` automatically. See [docs/tls.md](https://github.com/camcima/dev-oidc/blob/main/docs/tls.md) for the full feature reference, BYO mode, troubleshooting, and per-OS volume mount paths.
 
 ---
 
@@ -308,7 +308,7 @@ Every field in `dev-oidc.config.json`:
 }
 ```
 
-The canonical schema lives in [`src/config/schema.ts`](./src/config/schema.ts) — it validates every config file on load and on hot reload, so typos fail fast with a zod error pointing at the bad field.
+The canonical schema lives in [`src/config/schema.ts`](https://github.com/camcima/dev-oidc/blob/main/src/config/schema.ts) — it validates every config file on load and on hot reload, so typos fail fast with a zod error pointing at the bad field.
 
 ### Signing-key persistence
 
@@ -478,7 +478,7 @@ Bind-mount file watching is unreliable on Docker Desktop for macOS/WSL2. `docker
 
 ## Coding-agent skill
 
-This repo ships a [Claude Code](https://claude.com/claude-code) skill that walks an agent through wiring dev-oidc into your app — detect the existing OIDC integration, generate a matching `dev-oidc.config.json`, pick a run mode, update env vars or compose files. Source: [`skills/dev-oidc-setup/`](./skills/dev-oidc-setup/).
+This repo ships a [Claude Code](https://claude.com/claude-code) skill that walks an agent through wiring dev-oidc into your app — detect the existing OIDC integration, generate a matching `dev-oidc.config.json`, pick a run mode, update env vars or compose files. Source: [`skills/dev-oidc-setup/`](https://github.com/camcima/dev-oidc/tree/main/skills/dev-oidc-setup).
 
 Install with the [`skills`](https://github.com/vercel-labs/skills) CLI from Vercel Labs:
 
@@ -498,7 +498,7 @@ To uninstall: `npx skills remove dev-oidc-setup -a claude-code`.
 
 ## Contributing
 
-Contributions welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for setup, style, and commit conventions. Security issues: please read [SECURITY.md](./SECURITY.md) first.
+Contributions welcome. See [CONTRIBUTING.md](https://github.com/camcima/dev-oidc/blob/main/CONTRIBUTING.md) for setup, style, and commit conventions. Security issues: please read [SECURITY.md](https://github.com/camcima/dev-oidc/blob/main/SECURITY.md) first.
 
 ## Releasing
 
@@ -539,7 +539,7 @@ Runs `npm run release` first (npm publish + tag push), then `npm run release:doc
 
 ## Changelog
 
-See [CHANGELOG.md](./CHANGELOG.md).
+See [CHANGELOG.md](https://github.com/camcima/dev-oidc/blob/main/CHANGELOG.md).
 
 ## License
 
