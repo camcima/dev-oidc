@@ -1,5 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import path from 'node:path';
+import type { RequestListener, Server as HttpServer } from 'node:http';
+import type { TLSSocket } from 'node:tls';
+import httpolyglot from '@httptoolkit/httpolyglot';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
@@ -45,6 +48,11 @@ export interface CreateServerOptions {
   listenPort?: number;
   publicUrl?: string;
   logger?: DevOidcLogger;
+  /**
+   * When set, dev-oidc serves HTTPS (and same-port HTTP→HTTPS 301 redirect)
+   * using the provided cert/key. Loaded by `loadTlsMaterial` upstream.
+   */
+  tls?: { cert: Buffer; key: Buffer };
 }
 
 function deriveIssuer(options: CreateServerOptions): string {
@@ -52,7 +60,8 @@ function deriveIssuer(options: CreateServerOptions): string {
   if (options.publicUrl) return stripTrailingSlash(options.publicUrl);
   const host = options.listenHost ?? '127.0.0.1';
   const port = options.listenPort ?? 8095;
-  return `http://${host}:${port.toString()}`;
+  const scheme = options.tls ? 'https' : 'http';
+  return `${scheme}://${host}:${port.toString()}`;
 }
 
 export interface DevOidcServer {
@@ -106,7 +115,33 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
 
   const getTenant = (_req: FastifyRequest): ActiveTenantState => tenant;
 
-  const app = Fastify({ loggerInstance: logger });
+  const tlsMaterial = options.tls;
+  // httpolyglot.createServer returns a net.Server that proxies HTTP/HTTPS/HTTP2
+  // requests through the same handler. Fastify's serverFactory expects an
+  // http.Server-shaped value; the multiplexer is structurally compatible at
+  // runtime (it forwards request/response events), so we narrow with a cast and
+  // pin Fastify's RawServer generic to http.Server to match.
+  const app = Fastify<HttpServer>({
+    loggerInstance: logger,
+    ...(tlsMaterial && {
+      serverFactory: (handler: RequestListener): HttpServer =>
+        httpolyglot.createServer(
+          { tls: { cert: tlsMaterial.cert, key: tlsMaterial.key } },
+          handler,
+        ) as unknown as HttpServer,
+    }),
+  });
+
+  if (tlsMaterial) {
+    app.addHook('onRequest', async (req, reply) => {
+      const socket = req.socket as TLSSocket;
+      if (!socket.encrypted) {
+        const target = `https://${req.hostname}${req.url}`;
+        await reply.code(301).header('Location', target).send();
+      }
+    });
+  }
+
   registerAdminGuard(app, {
     allowedHosts: buildAdminAllowedHosts({
       listenHost: options.listenHost ?? '127.0.0.1',
