@@ -12,3 +12,6 @@ test-report.junit.xml
 
 # Skill iteration workspace — local test outputs and fixtures, not source.
 skills/dev-oidc-setup-workspace
+
+# Personal AI-workflow artifacts (specs, plans, brainstorms). Local-only.
+docs/superpowers
