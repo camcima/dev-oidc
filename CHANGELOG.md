@@ -6,10 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+## [0.3.0] - 2026-05-03
+
 ### Added
 
+- **Native TLS support.** Set `server.tls` in `hub.json` (auto-mkcert mode: `{}` or `{ hostnames: [...] }`; BYO mode: `{ cert, key }`) or pass `--tls` / `--tls-cert` / `--tls-key` / `--tls-hostname` in legacy CLI mode. dev-oidc auto-provisions leaves from your mkcert root CA and caches them under `${XDG_CACHE_HOME:-~/.cache}/dev-oidc/certs/` (native) or `/data/certs/` (Docker).
+- **Same-port HTTP→HTTPS redirect.** When TLS is enabled, plain HTTP requests on the configured port get a `301 Moved Permanently` to `https://`. Multiplexing via [`@httptoolkit/httpolyglot`](https://github.com/httptoolkit/httpolyglot).
+- **Docker image bundles `mkcert`.** The runtime stage now installs `mkcert` (~5MB). Mount your host's mkcert CAROOT into `/home/node/.local/share/mkcert` to share trust.
+- `docs/tls.md` — feature reference with per-OS install commands, Docker compose patterns, BYO guidance, and troubleshooting.
 - `release-docker.yml` workflow that builds a multi-arch (`linux/amd64`, `linux/arm64`) image from a `v*` tag and pushes it to `ghcr.io/camcima/dev-oidc`. Triggered manually via `workflow_dispatch` so npm and Docker publish paths are independent.
 - `release:docker` and `release:all` npm scripts. `release:docker` dispatches the workflow for the current `package.json` version; `release:all` chains `release` (npm) and `release:docker`.
+
+### Changed
+
+None for v0.2.x consumers. Configs without a `tls` block keep their HTTP listener as today.
+
+### Programmatic API
+
+- New optional `tls?: { cert: Buffer; key: Buffer }` on `CreateServerOptions`. When set, dev-oidc wires Fastify's `serverFactory` through `@httptoolkit/httpolyglot` and adds an `onRequest` redirect hook.
+- `deriveIssuer()` defaults to `https://` when `tls` is set.
+
+### Hot-reload scope
+
+TLS material is loaded once at startup. Editing `hub.json`'s `tls` block, regenerating the certs on disk, or changing the user's mkcert root all require a process restart. dev-oidc logs a WARN when it sees a `tls` change in `hub.json`.
+
+### New dependency
+
+- `@httptoolkit/httpolyglot` — the maintained fork of `httpolyglot` by HTTP Toolkit. ~80 LOC, MIT, no transitive deps. Provides the same-port HTTP/HTTPS multiplex.
 
 ## [0.2.0] - 2026-04-25
 
