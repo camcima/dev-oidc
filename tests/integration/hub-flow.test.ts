@@ -1,10 +1,10 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import * as jose from 'jose';
 import { describe, expect, it } from 'vitest';
 import { createHubServer } from '@/hub/server.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function pkcePair() {
   const verifier = randomBytes(32).toString('base64url');
@@ -13,7 +13,7 @@ function pkcePair() {
 }
 
 function tmpProjectConfig(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+  const dir = makeTmpDir('dev-oidc-hub-');
   const file = path.join(dir, 'dev-oidc.config.json');
   writeFileSync(
     file,
@@ -33,7 +33,7 @@ function tmpProjectConfig(): string {
 }
 
 function tmpHubConfig(tenants: Array<{ slug: string; configPath: string }>): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hubcfg-'));
+  const dir = makeTmpDir('dev-oidc-hubcfg-');
   const file = path.join(dir, 'hub.json');
   writeFileSync(
     file,
@@ -124,7 +124,7 @@ describe('integration: hub mode auth-code flow', () => {
   });
 
   it('returns 503 for an error-state tenant', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const dir = makeTmpDir('dev-oidc-bad-');
     const badCfg = path.join(dir, 'bad.json');
     writeFileSync(badCfg, 'not json');
     const hubCfg = tmpHubConfig([{ slug: 'broken', configPath: badCfg }]);
@@ -145,7 +145,7 @@ describe('integration: hub mode auth-code flow', () => {
   it('derives an https:// issuer when server.tls is set and server.publicUrl is omitted', async () => {
     const cfg = tmpProjectConfig();
     const fixturesDir = path.resolve(__dirname, '..', 'fixtures', 'tls');
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-tls-'));
+    const dir = makeTmpDir('dev-oidc-hub-tls-');
     const hubCfg = path.join(dir, 'hub.json');
     writeFileSync(
       hubCfg,
@@ -191,7 +191,7 @@ describe('integration: hub mode auth-code flow', () => {
     try {
       const cfg = tmpProjectConfig();
       const fixturesDir = path.resolve(__dirname, '..', 'fixtures', 'tls');
-      const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-tls-env-'));
+      const dir = makeTmpDir('dev-oidc-hub-tls-env-');
       const hubCfg = path.join(dir, 'hub.json');
       writeFileSync(
         hubCfg,
@@ -270,7 +270,7 @@ describe('integration: hub mode auth-code flow', () => {
   });
 
   it('GET /admin/<slug> returns 503 HTML for an error-state tenant', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const dir = makeTmpDir('dev-oidc-bad-');
     const badCfg = path.join(dir, 'bad.json');
     writeFileSync(badCfg, 'not json');
     const hubCfg = tmpHubConfig([{ slug: 'broken', configPath: badCfg }]);
@@ -319,7 +319,7 @@ describe('integration: hub mode auth-code flow', () => {
     // dashboard polls this endpoint, so its shape is part of the wire
     // contract.
     const goodCfg = tmpProjectConfig();
-    const badDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-mixed-bad-'));
+    const badDir = makeTmpDir('dev-oidc-mixed-bad-');
     const badCfg = path.join(badDir, 'bad.json');
     writeFileSync(badCfg, 'not json');
     const hubCfg = tmpHubConfig([

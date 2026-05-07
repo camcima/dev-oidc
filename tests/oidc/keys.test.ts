@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createKeyMaterial } from '@/oidc/keys.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 describe('createKeyMaterial (generate)', () => {
   it('generates an RS256 keypair when source is "generate"', async () => {
@@ -26,7 +26,7 @@ describe('createKeyMaterial (generate)', () => {
 });
 
 describe('createKeyMaterial (file-backed)', () => {
-  const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-keys-'));
+  const tmpDir = makeTmpDir('dev-oidc-keys-');
 
   it('generates and persists the key on first call when the file does not exist', async () => {
     const file = path.join(tmpDir, 'new-key.json');
@@ -126,7 +126,7 @@ describe('createKeyMaterial (ES256)', () => {
   });
 
   it('persists and reloads an ES256 key from file', async () => {
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-es-'));
+    const tmpDir = makeTmpDir('dev-oidc-es-');
     const file = path.join(tmpDir, 'es-key.json');
 
     const first = await createKeyMaterial({
@@ -146,7 +146,7 @@ describe('createKeyMaterial (ES256)', () => {
   });
 
   it('throws when configured alg differs from persisted alg', async () => {
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-mismatch-'));
+    const tmpDir = makeTmpDir('dev-oidc-mismatch-');
     const file = path.join(tmpDir, 'rs-key.json');
 
     await createKeyMaterial({ kid: 'k', alg: 'RS256', source: `file:${file}` });
@@ -159,7 +159,7 @@ describe('createKeyMaterial (ES256)', () => {
 
 describe('createKeyMaterial (configDir resolution)', () => {
   it('resolves a relative file: path against configDir', async () => {
-    const configDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cfgdir-'));
+    const configDir = makeTmpDir('dev-oidc-cfgdir-');
     mkdirSync(path.join(configDir, 'keys'));
     const km = await createKeyMaterial(
       { kid: 'rel', alg: 'RS256', source: 'file:keys/k1.json' },
@@ -172,8 +172,8 @@ describe('createKeyMaterial (configDir resolution)', () => {
   });
 
   it('uses an absolute file: path verbatim regardless of configDir', async () => {
-    const configDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cfgdir-'));
-    const keyDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-keys-'));
+    const configDir = makeTmpDir('dev-oidc-cfgdir-');
+    const keyDir = makeTmpDir('dev-oidc-keys-');
     const absoluteKey = path.join(keyDir, 'abs.json');
 
     await createKeyMaterial(
@@ -187,7 +187,7 @@ describe('createKeyMaterial (configDir resolution)', () => {
   it('falls back to CWD-relative when configDir is omitted', async () => {
     // Backwards-compat: tests that don't pass configDir should still work
     // because the implementation defaults configDir to process.cwd().
-    const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cwd-'));
+    const tmpDir = makeTmpDir('dev-oidc-cwd-');
     const file = path.join(tmpDir, 'cwd-fallback.json');
     await createKeyMaterial({ kid: 'cwd', alg: 'RS256', source: `file:${file}` });
     expect(existsSync(file)).toBe(true);

@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { watchHubConfig } from '@/hub/watcher.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -11,7 +11,7 @@ function sleep(ms: number): Promise<void> {
 
 describe('watchHubConfig', () => {
   it('triggers onReload when the file changes', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hubw-'));
+    const tmp = makeTmpDir('dev-oidc-hubw-');
     const filePath = path.join(tmp, 'hub.json');
     writeFileSync(
       filePath,
@@ -42,7 +42,7 @@ describe('watchHubConfig', () => {
   });
 
   it('reports error on invalid JSON without crashing', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hubw-'));
+    const tmp = makeTmpDir('dev-oidc-hubw-');
     const filePath = path.join(tmp, 'hub.json');
     writeFileSync(
       filePath,

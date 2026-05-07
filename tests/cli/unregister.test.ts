@@ -1,14 +1,14 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runRegister, runUnregister } from '@/cli/hub-commands.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 describe('unregister', () => {
   it('removes the slug entry', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-'));
+    const dir = makeTmpDir('dev-oidc-cli-');
     const hub = path.join(dir, 'hub.json');
-    const proj = mkdtempSync(path.join(tmpdir(), 'dev-oidc-proj-'));
+    const proj = makeTmpDir('dev-oidc-proj-');
     const cfg = path.join(proj, 'dev-oidc.config.json');
     writeFileSync(
       cfg,
@@ -26,7 +26,7 @@ describe('unregister', () => {
   });
 
   it('exits 1 when slug is unknown', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-'));
+    const dir = makeTmpDir('dev-oidc-cli-');
     const hub = path.join(dir, 'hub.json');
     const result = await runUnregister({ hubConfigPath: hub, slug: 'no-such' });
     expect(result.exitCode).toBe(1);
@@ -34,7 +34,7 @@ describe('unregister', () => {
   });
 
   it('rejects malformed slug shape with exitCode=1', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-'));
+    const dir = makeTmpDir('dev-oidc-cli-');
     const hub = path.join(dir, 'hub.json');
     const result = await runUnregister({ hubConfigPath: hub, slug: '../foo' });
     expect(result.exitCode).toBe(1);
@@ -44,7 +44,7 @@ describe('unregister', () => {
   });
 
   it('returns exitCode=2 when the hub config file is malformed', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-bad-'));
+    const dir = makeTmpDir('dev-oidc-cli-bad-');
     const hub = path.join(dir, 'hub.json');
     writeFileSync(hub, '{not valid json');
     const result = await runUnregister({ hubConfigPath: hub, slug: 'app' });

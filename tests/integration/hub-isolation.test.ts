@@ -1,10 +1,10 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import * as jose from 'jose';
 import { describe, expect, it } from 'vitest';
 import { createHubServer } from '@/hub/server.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function pkce() {
   const v = randomBytes(32).toString('base64url');
@@ -13,7 +13,7 @@ function pkce() {
 }
 
 function projectConfig(opts: { kid: string }): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-iso-'));
+  const dir = makeTmpDir('dev-oidc-iso-');
   const file = path.join(dir, 'dev-oidc.config.json');
   writeFileSync(
     file,
@@ -29,7 +29,7 @@ function projectConfig(opts: { kid: string }): string {
 }
 
 function hubConfig(tenants: Array<{ slug: string; configPath: string }>): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-iso-hub-'));
+  const dir = makeTmpDir('dev-oidc-iso-hub-');
   const file = path.join(dir, 'hub.json');
   writeFileSync(
     file,

@@ -1,16 +1,16 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runRegister } from '@/cli/hub-commands.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function newHub(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-'));
+  const dir = makeTmpDir('dev-oidc-cli-');
   return path.join(dir, 'hub.json');
 }
 
 function newProject(slugDir = 'my-app'): string {
-  const dir = mkdtempSync(path.join(tmpdir(), `dev-oidc-${slugDir}-`));
+  const dir = makeTmpDir(`dev-oidc-${slugDir}-`);
   // Force the basename to match `slugDir`
   const projectDir = path.join(dir, slugDir);
   // Simplest: write the config directly under `dir`, slug is derived from dir basename
@@ -44,7 +44,7 @@ describe('register', () => {
 
   it('derives slug from directory name when --slug is omitted', async () => {
     const hub = newHub();
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-derived-'));
+    const dir = makeTmpDir('dev-oidc-derived-');
     const projectRoot = path.join(dir, 'my-derived-app');
     mkdirSync(projectRoot);
     const cfg = path.join(projectRoot, 'dev-oidc.config.json');
@@ -74,7 +74,7 @@ describe('register', () => {
 
   it('rejects when project config is invalid', async () => {
     const hub = newHub();
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const dir = makeTmpDir('dev-oidc-bad-');
     const cfg = path.join(dir, 'dev-oidc.config.json');
     writeFileSync(cfg, 'not json');
 
@@ -108,7 +108,7 @@ describe('register', () => {
     // to an empty slug after the strip-and-trim pipeline. The CLI must
     // surface that as a clear error rather than register an empty string.
     const hub = newHub();
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-emptyslug-'));
+    const dir = makeTmpDir('dev-oidc-emptyslug-');
     const projectRoot = path.join(dir, '!!!');
     mkdirSync(projectRoot);
     const cfg = path.join(projectRoot, 'dev-oidc.config.json');
@@ -128,7 +128,7 @@ describe('register', () => {
 
   it('rejects a non-.json file path when it is not a directory', async () => {
     const hub = newHub();
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-noext-'));
+    const dir = makeTmpDir('dev-oidc-noext-');
     const file = path.join(dir, 'config.yaml');
     writeFileSync(file, '');
     const result = await runRegister({ hubConfigPath: hub, configPathArg: file, slug: 'app' });
@@ -137,7 +137,7 @@ describe('register', () => {
   });
 
   it('returns exitCode=2 when the hub config file is malformed', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-cli-bad-'));
+    const dir = makeTmpDir('dev-oidc-cli-bad-');
     const hub = path.join(dir, 'hub.json');
     writeFileSync(hub, '{not valid json');
     const cfg = newProject();
@@ -148,7 +148,7 @@ describe('register', () => {
 
   it('accepts a project directory and resolves dev-oidc.config.json inside', async () => {
     const hub = newHub();
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-dirarg-'));
+    const dir = makeTmpDir('dev-oidc-dirarg-');
     const projectRoot = path.join(dir, 'pkg-from-dir');
     mkdirSync(projectRoot);
     const cfgPath = path.join(projectRoot, 'dev-oidc.config.json');

@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHubServer } from '@/hub/server.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function projectConfig(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-admin-'));
+  const dir = makeTmpDir('dev-oidc-hub-admin-');
   const cfg = path.join(dir, 'dev-oidc.config.json');
   writeFileSync(
     cfg,
@@ -22,7 +22,7 @@ function projectConfig(): string {
 }
 
 function hubFor(tenants: Array<{ slug: string; configPath: string }>): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-admin-cfg-'));
+  const dir = makeTmpDir('dev-oidc-hub-admin-cfg-');
   const hub = path.join(dir, 'hub.json');
   writeFileSync(
     hub,

@@ -1,9 +1,9 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as LegacyModule from '@/cli/legacy.js';
 import type { LegacyStartOptions } from '@/cli/legacy.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 interface CliResult {
   exitCode: number;
@@ -49,7 +49,7 @@ async function runCli(argv: string[]): Promise<CliResult> {
 }
 
 function tmpProjectConfig(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-pub-'));
+  const dir = makeTmpDir('dev-oidc-pub-');
   const file = path.join(dir, 'config.json');
   writeFileSync(
     file,

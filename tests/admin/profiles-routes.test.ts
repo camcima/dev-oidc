@@ -1,5 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +6,7 @@ import type { Config } from '@/config/schema.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function buildActiveTenant(overrides: Partial<ActiveTenantState>): ActiveTenantState {
   return {
@@ -39,7 +39,7 @@ function baseConfig(): Config {
 }
 
 async function buildApp() {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-admin-'));
+  const dir = makeTmpDir('dev-oidc-admin-');
   const file = path.join(dir, 'config.json');
   writeFileSync(file, JSON.stringify(baseConfig(), null, 2));
   const config = baseConfig();

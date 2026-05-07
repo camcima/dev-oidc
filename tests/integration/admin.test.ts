@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createDevOidcServer } from '@/server.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function seed(file: string): void {
   const config: Config = {
@@ -27,7 +27,7 @@ function seed(file: string): void {
 
 describe('admin integration', () => {
   it('GET /admin serves HTML with the profile table', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-admin-int-'));
+    const dir = makeTmpDir('dev-oidc-admin-int-');
     const file = path.join(dir, 'config.json');
     seed(file);
     const config: Config = JSON.parse(readFileSync(file, 'utf8'));
@@ -48,7 +48,7 @@ describe('admin integration', () => {
   });
 
   it('POST /admin/api/profiles updates disk and in-memory state', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-admin-int-'));
+    const dir = makeTmpDir('dev-oidc-admin-int-');
     const file = path.join(dir, 'config.json');
     seed(file);
     const config: Config = JSON.parse(readFileSync(file, 'utf8'));

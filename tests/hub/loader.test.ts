@@ -1,14 +1,12 @@
 import {
   closeSync,
   existsSync,
-  mkdtempSync,
   openSync,
   readFileSync,
   statSync,
   utimesSync,
   writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -17,6 +15,7 @@ import {
   mutateHubConfig,
   saveHubConfig,
 } from '@/hub/loader.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 describe('defaultHubConfigPath', () => {
   it('honors XDG_CONFIG_HOME when set', () => {
@@ -43,7 +42,7 @@ describe('defaultHubConfigPath', () => {
 
 describe('loadHubConfig', () => {
   it('auto-creates an empty hub config when the file does not exist', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
     expect(existsSync(filePath)).toBe(false);
 
@@ -57,7 +56,7 @@ describe('loadHubConfig', () => {
   });
 
   it('writes the bootstrap with mode 0600', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
 
     await loadHubConfig(filePath);
@@ -66,7 +65,7 @@ describe('loadHubConfig', () => {
   });
 
   it('reads an existing valid hub config', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
     writeFileSync(
       filePath,
@@ -84,7 +83,7 @@ describe('loadHubConfig', () => {
   });
 
   it('throws when an existing file is invalid JSON', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
     writeFileSync(filePath, 'not json');
 
@@ -92,7 +91,7 @@ describe('loadHubConfig', () => {
   });
 
   it('throws when an existing file fails Zod validation', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
     writeFileSync(
       filePath,
@@ -109,7 +108,7 @@ describe('loadHubConfig', () => {
 
 describe('saveHubConfig', () => {
   it('atomic-writes the hub config (tmp + rename)', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-hub-'));
+    const tmp = makeTmpDir('dev-oidc-hub-');
     const filePath = path.join(tmp, 'hub.json');
     await loadHubConfig(filePath); // create initial
 
@@ -126,7 +125,7 @@ describe('saveHubConfig', () => {
 
 describe('mutateHubConfig', () => {
   it('applies the mutator and persists the result under the lock', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-mutate-'));
+    const tmp = makeTmpDir('dev-oidc-mutate-');
     const filePath = path.join(tmp, 'hub.json');
     const next = await mutateHubConfig(filePath, (current) => ({
       ...current,
@@ -138,7 +137,7 @@ describe('mutateHubConfig', () => {
   });
 
   it('serializes concurrent mutations against the same file', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-concur-'));
+    const tmp = makeTmpDir('dev-oidc-concur-');
     const filePath = path.join(tmp, 'hub.json');
     // Race two register-equivalent edits. Without serialization, one
     // would overwrite the other's tenant; with the lockfile both land.
@@ -164,7 +163,7 @@ describe('mutateHubConfig', () => {
   });
 
   it('reclaims a stale lockfile (mtime older than the stale threshold)', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-stale-'));
+    const tmp = makeTmpDir('dev-oidc-stale-');
     const filePath = path.join(tmp, 'hub.json');
     const lockPath = `${filePath}.lock`;
 
@@ -187,7 +186,7 @@ describe('mutateHubConfig', () => {
   });
 
   it('propagates mutator errors so the caller can map them to user-facing exit codes', async () => {
-    const tmp = mkdtempSync(path.join(tmpdir(), 'dev-oidc-err-'));
+    const tmp = makeTmpDir('dev-oidc-err-');
     const filePath = path.join(tmp, 'hub.json');
     await expect(
       mutateHubConfig(filePath, () => {

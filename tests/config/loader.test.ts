@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadConfig } from '@/config/loader.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 describe('loadConfig', () => {
-  const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-'));
+  const tmpDir = makeTmpDir('dev-oidc-');
 
   const valid = {
     signingKey: { kid: 'k1' },

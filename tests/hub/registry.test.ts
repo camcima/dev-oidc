@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTenantRegistry } from '@/hub/registry.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function tmpProjectConfig(overrides: Partial<{ kid: string; clients: unknown }> = {}): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-proj-'));
+  const dir = makeTmpDir('dev-oidc-proj-');
   const file = path.join(dir, 'dev-oidc.config.json');
   writeFileSync(
     file,
@@ -48,7 +48,7 @@ describe('TenantRegistry', () => {
 
   it('places a tenant in error state when its config is invalid JSON', async () => {
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const dir = makeTmpDir('dev-oidc-bad-');
     const cfgPath = path.join(dir, 'bad.json');
     writeFileSync(cfgPath, 'not valid json');
 
@@ -63,7 +63,7 @@ describe('TenantRegistry', () => {
 
   it('places a tenant in error state when its config fails Zod validation', async () => {
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-bad-'));
+    const dir = makeTmpDir('dev-oidc-bad-');
     const cfgPath = path.join(dir, 'bad.json');
     writeFileSync(cfgPath, JSON.stringify({ signingKey: { kid: 'k' }, clients: [] }));
 
@@ -106,7 +106,7 @@ describe('TenantRegistry', () => {
 describe('TenantRegistry.reconcile', () => {
   it('retries an error tenant on the next reconcile after the config is fixed', async () => {
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-fix-'));
+    const dir = makeTmpDir('dev-oidc-fix-');
     const cfgPath = path.join(dir, 'dev-oidc.config.json');
     // Initially invalid
     writeFileSync(cfgPath, 'not valid json');
@@ -229,7 +229,7 @@ describe('TenantRegistry events', () => {
     // successful reload fires `profilesChanged`. This proves the active
     // tenant's runtime view stays current without forcing a reconcile.
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-reload-'));
+    const dir = makeTmpDir('dev-oidc-reload-');
     const cfgPath = path.join(dir, 'dev-oidc.config.json');
     writeFileSync(
       cfgPath,
@@ -271,7 +271,7 @@ describe('TenantRegistry events', () => {
     // tenant did not flip to error and still serves the last-known-good
     // profiles list.
     const reg = createTenantRegistry({ publicUrl: 'http://localhost:8095' });
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-err-'));
+    const dir = makeTmpDir('dev-oidc-err-');
     const cfgPath = path.join(dir, 'dev-oidc.config.json');
     writeFileSync(
       cfgPath,

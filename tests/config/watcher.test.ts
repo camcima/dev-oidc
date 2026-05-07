@@ -1,8 +1,8 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { watchConfig } from '@/config/watcher.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function writeValidConfig(file: string, kid: string): void {
   writeFileSync(
@@ -22,7 +22,7 @@ function writeValidConfig(file: string, kid: string): void {
 }
 
 describe('watchConfig', () => {
-  const tmpDir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-watch-'));
+  const tmpDir = makeTmpDir('dev-oidc-watch-');
 
   it('emits a reload event when the file changes (debounced)', async () => {
     const file = path.join(tmpDir, 'config.json');

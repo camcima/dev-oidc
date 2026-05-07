@@ -1,11 +1,11 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runList } from '@/cli/hub-commands.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function setupHub(tenants: Array<{ slug: string; configPath: string; enabled: boolean }>): string {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-list-'));
+  const dir = makeTmpDir('dev-oidc-list-');
   const hub = path.join(dir, 'hub.json');
   writeFileSync(
     hub,
@@ -48,7 +48,7 @@ describe('list', () => {
   });
 
   it('returns exitCode=2 when the hub config is malformed', async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-list-bad-'));
+    const dir = makeTmpDir('dev-oidc-list-bad-');
     const hub = path.join(dir, 'hub.json');
     writeFileSync(hub, '{not valid json');
     const result = await runList({ hubConfigPath: hub });

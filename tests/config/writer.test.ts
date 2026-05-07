@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { writeConfigFile } from '@/config/writer.js';
 import type { Config } from '@/config/schema.js';
+import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function baseConfig(): Config {
   return {
@@ -25,7 +25,7 @@ function baseConfig(): Config {
 }
 
 describe('writeConfigFile', () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'dev-oidc-writer-'));
+  const dir = makeTmpDir('dev-oidc-writer-');
 
   it('writes the config atomically (tmp + rename) with 2-space indent', async () => {
     const file = path.join(dir, 'config.json');
