@@ -103,7 +103,7 @@ describe('POST /token (authorization_code)', () => {
       { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
-    expect(payload.email).toBe('a@x.com');
+    expect(payload.email).toBeUndefined();
     expect((payload as Record<string, unknown>).role).toBe('admin');
     expect((payload as Record<string, unknown>).scope).toBe('openid profile custom_scope');
     expect((res.json() as { scope: string }).scope).toBe('openid profile custom_scope');
@@ -324,6 +324,108 @@ async function buildAppWithSecret() {
   registerToken(app, { getTenant: () => tenant });
   return { app, codes };
 }
+
+describe('POST /token (ID-token fidelity claims)', () => {
+  it('emits azp/at_hash/auth_time on the id_token and a scope-gated identity set', async () => {
+    const { app, codes, keyMaterial } = await buildApp();
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    const code = codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid profile',
+      authTime: 1700000000,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: 'my-app',
+        redirect_uri: 'http://localhost:5173/auth/callback',
+      }).toString(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { access_token: string; id_token: string };
+
+    const idKey = await jose.importJWK(keyMaterial.publicJwk, 'RS256');
+    const { payload: id } = await jose.jwtVerify(body.id_token, idKey, {
+      issuer: 'http://localhost:8095',
+      audience: 'my-app',
+    });
+    expect(id.azp).toBe('my-app');
+    expect(id.auth_time).toBe(1700000000);
+    expect(id.name).toBe('Alice'); // profile scope granted
+    expect(id.email).toBeUndefined(); // email scope NOT granted
+
+    const expectedAtHash = createHash('sha256')
+      .update(body.access_token)
+      .digest()
+      .subarray(0, 16)
+      .toString('base64url');
+    expect(id.at_hash).toBe(expectedAtHash);
+
+    const { payload: at } = await jose.jwtVerify(body.access_token, idKey, {
+      issuer: 'http://localhost:8095',
+      audience: 'my-api',
+    });
+    expect(at.email).toBeUndefined();
+    expect((at as Record<string, unknown>).role).toBe('admin');
+    await app.close();
+  });
+
+  it('keeps auth_time stable across a refresh', async () => {
+    const { app, codes } = await buildApp();
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    const code = codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
+      authTime: 1700000000,
+    });
+    const first = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: 'my-app',
+        redirect_uri: 'http://localhost:5173/auth/callback',
+      }).toString(),
+    });
+    const { id_token: id1, refresh_token } = first.json() as {
+      id_token: string;
+      refresh_token: string;
+    };
+    const authTime1 = jose.decodeJwt(id1).auth_time;
+    expect(authTime1).toBe(1700000000);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token,
+        client_id: 'my-app',
+      }).toString(),
+    });
+    const { id_token: id2 } = second.json() as { id_token: string };
+    expect(jose.decodeJwt(id2).auth_time).toBe(1700000000);
+    await app.close();
+  });
+});
 
 describe('POST /token (client_secret enforcement)', () => {
   function payload(extra: Record<string, string>): string {

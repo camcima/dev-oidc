@@ -81,7 +81,7 @@ describe('integration: full auth-code + PKCE flow', () => {
         }).toString(),
       });
       expect(tokenRes.statusCode).toBe(200);
-      const tokens = tokenRes.json() as { access_token: string; scope: string };
+      const tokens = tokenRes.json() as { access_token: string; id_token: string; scope: string };
 
       const jwksRes = await server.app.inject({
         method: 'GET',
@@ -95,10 +95,28 @@ describe('integration: full auth-code + PKCE flow', () => {
         audience: 'my-api',
       });
       expect(payload.sub).toBe('bob');
-      expect(payload.email).toBe('bob@example.com');
+      expect((payload as Record<string, unknown>).email).toBeUndefined(); // identity claims are not in the access token
+
+      const { payload: idPayload } = await jose.jwtVerify(tokens.id_token, pubKey, {
+        issuer: 'http://localhost:8095',
+        audience: 'my-app', // use the actual client_id this test sends to /authorize
+      });
+      expect(idPayload.sub).toBe('bob');
+      expect(idPayload.email).toBe('bob@example.com'); // scope includes "email"
+
       expect((payload as Record<string, unknown>).role).toBe('manager');
       expect(tokens.scope).toContain('openid');
       expect((payload as Record<string, unknown>).scope).toBe('openid profile email');
+
+      const userinfoRes = await server.app.inject({
+        method: 'GET',
+        url: '/userinfo',
+        headers: { authorization: `Bearer ${tokens.access_token}` },
+      });
+      expect(userinfoRes.statusCode).toBe(200);
+      const userinfo = userinfoRes.json() as Record<string, unknown>;
+      expect(userinfo.sub).toBe('bob');
+      expect(userinfo.email).toBe('bob@example.com');
     } finally {
       await server.close();
     }

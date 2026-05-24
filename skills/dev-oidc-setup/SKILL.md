@@ -25,6 +25,13 @@ If you encounter a `dev-oidc.config.json` from v0.1.x that has those three field
 4. **Docker compose wire-ups should mount the host's mkcert state** so the container signs leaves with the user's already-trusted root: `${HOME}/.local/share/mkcert:/home/node/.local/share/mkcert:ro` (Linux/WSL) or `${HOME}/Library/Application Support/mkcert:/home/node/.local/share/mkcert:ro` (macOS).
 5. **Project `dev-oidc.config.json` containing a top-level `tls` field fails Zod validation** with a tailored message pointing at `hub.server.tls`. Strip it as part of any v0.3 wire-up edit.
 
+### v0.4 changes
+
+1. **New optional profile fields** map to standard OIDC claims: `givenName`→`given_name`, `familyName`→`family_name`, `locale`→`locale`, `hostedDomain`→`hd`, `emailVerified`→`email_verified`. The existing `avatar` field now also surfaces as the `picture` claim.
+2. **`/userinfo` endpoint exists** (`GET`/`POST`), advertised in discovery. Libraries that hydrate the user from userinfo (Passport, Spring Security) work locally now.
+3. **Identity claims are scope-gated and removed from the access token.** `profile` scope → name/given_name/family_name/picture/locale; `email` scope → email/email_verified — emitted in the **ID token and `/userinfo`**, not the access token. Custom `profile.claims` are unaffected (still in every token). If an app read identity off the access token, repoint it to the ID token or `/userinfo`, and ensure it requests `profile`/`email` scopes.
+4. **New ID-token claims:** `azp`, `at_hash`, `auth_time`.
+
 ## Decision: wire-up or edit?
 
 Before doing anything, look at the cwd:
@@ -59,6 +66,7 @@ Note which IdP they're currently using — it affects later choices:
 
 - **Entra / Azure AD (MSAL)** → set `subjectClaim: "oid"` in dev-oidc so the JWT's `oid` claim carries the user's ID, matching what their backend expects. **Also**: MSAL refuses to talk to a non-Microsoft authority unless you set `protocolMode: 'OIDC'` and add the dev-oidc origin to `knownAuthorities`. Without those, MSAL throws `ClientAuthError: endpoints_resolution_error` at login. See [MSAL gotcha](#msal-gotcha-knownauthorities--protocolmode).
 - **Auth0** → audiences are mandatory; make sure `audience` is set on the dev-oidc client entry.
+- **Google** → `subjectClaim: "sub"` (the default). Ensure the app requests `profile` and `email` scopes so the ID token / `/userinfo` carry name and email. See `examples/google.config.json` and the README "Emulating Google" section.
 
 ### 2. Pick a run mode
 
@@ -144,7 +152,7 @@ Install dev-oidc as a devDependency and add a script:
     "dev:oidc": "dev-oidc start --config ./dev-oidc.config.json",
   },
   "devDependencies": {
-    "dev-oidc": "^0.2.0",
+    "dev-oidc": "^0.4.0",
   },
 }
 ```
@@ -165,7 +173,7 @@ TLS flags (v0.3+):
 ```bash
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
-  ghcr.io/camcima/dev-oidc:0.3.1
+  ghcr.io/camcima/dev-oidc:0.4.0
 ```
 
 Document the command somewhere durable (project README's local-dev section, a `scripts/dev-oidc.sh`, etc.). Don't invent a new docs structure if one exists.
@@ -255,7 +263,7 @@ Use this as the canonical starting point. Strip any fields that aren't needed; t
 
 > **Do not** include `issuer`, `port`, or `host`. v0.2 rejects all three with tailored errors. The Hub computes the issuer from `publicUrl + slug`; legacy mode takes `--public-url`/`--port`/`--host` flags.
 
-Reserved JWT claim names that `profile.claims` cannot override: `sub`, `name`, `email`, `iat`, `exp`, `iss`, `aud`, `nonce`. Anything else gets merged into the JWT verbatim.
+Reserved JWT claim names that `profile.claims` cannot override: `sub`, `name`, `given_name`, `family_name`, `picture`, `locale`, `email`, `email_verified`, `hd`, `iat`, `exp`, `iss`, `aud`, `nonce`, `azp`, `at_hash`, `auth_time`, `scope`. Anything else gets merged into the JWT verbatim.
 
 ## Compose template
 
@@ -264,7 +272,7 @@ Append this service to an existing `docker-compose.yml` (or place it in `docker-
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       # - dev-oidc-data:/data        # Uncomment if signingKey.source is "file:/data/..."
@@ -299,7 +307,7 @@ Same shape as above, but mount the host's mkcert state and pass `--tls`. Browser
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     ports:
       - '8095:8095'
     volumes:
@@ -411,6 +419,28 @@ If the user has a persisted RS256 key file, ES256 will refuse to load it — the
 ```
 
 The profile's `id` still lands in `sub`; this just _adds_ an `oid` alias so backends that key off `oid` (the Entra/Azure AD convention) work.
+
+### Add Google-style identity claims to a profile
+
+```jsonc
+{
+  "profiles": [
+    {
+      "id": "104726349812340987612", // Google "sub" is a long numeric string.
+      "displayName": "Alice Developer",
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "givenName": "Alice",
+      "familyName": "Developer",
+      "avatar": "https://lh3.googleusercontent.com/a/default-user", // → picture claim
+      "locale": "en",
+      "hostedDomain": "example.com", // → hd claim, for Workspace-domain checks
+    },
+  ],
+}
+```
+
+Request `openid profile email` so these land in the ID token and `/userinfo`.
 
 ### Programmatic API (e.g. in a Vitest `globalSetup`)
 

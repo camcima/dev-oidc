@@ -44,4 +44,36 @@ describe('buildDiscoveryDocument', () => {
     });
     expect(doc.issuer).toBe('http://localhost:8095');
   });
+
+  it('advertises userinfo_endpoint and claims_supported', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
+    expect(doc.userinfo_endpoint).toBe('http://localhost:8095/userinfo');
+    expect(doc.claims_supported).toContain('sub');
+    expect(doc.claims_supported).toContain('email_verified');
+    expect(doc.claims_supported).toContain('at_hash');
+    expect(doc.claims_supported).toContain('hd');
+  });
+
+  it('advertises the subject alias in claims_supported when subjectClaim != "sub"', () => {
+    const oid = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+      subjectClaim: 'oid',
+    });
+    expect(oid.claims_supported).toContain('oid');
+
+    const dflt = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+      subjectClaim: 'sub',
+    });
+    // "sub" is already present exactly once; no duplicate alias appended.
+    expect(dflt.claims_supported.filter((c) => c === 'sub')).toHaveLength(1);
+  });
 });

@@ -14,6 +14,11 @@ const ProfileInput = z.object({
   displayName: z.string().min(1),
   email: z.string().email(),
   avatar: z.string().url().nullable().optional(),
+  emailVerified: z.boolean().optional(),
+  givenName: z.string().min(1).optional(),
+  familyName: z.string().min(1).optional(),
+  locale: z.string().min(1).optional(),
+  hostedDomain: z.string().min(1).optional(),
   claims: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -23,6 +28,11 @@ function toProfile(input: z.infer<typeof ProfileInput>): Profile {
     displayName: input.displayName,
     email: input.email,
     avatar: input.avatar ?? null,
+    emailVerified: input.emailVerified,
+    givenName: input.givenName,
+    familyName: input.familyName,
+    locale: input.locale,
+    hostedDomain: input.hostedDomain,
     claims: input.claims ?? {},
   };
 }

@@ -1,0 +1,37 @@
+{
+  "signingKey": { "kid": "dev-key-1", "source": "file:./.dev-oidc/signing-key.json" },
+  "subjectClaim": "sub",
+  "tokenTtlSeconds": 3600,
+  "clients": [
+    {
+      "clientId": "my-google-app",
+      "redirectUris": ["http://localhost:3000/api/auth/callback/google"],
+      "audience": "my-google-app"
+    }
+  ],
+  "branding": { "title": "Sign in with dev-oidc (Google emulation)", "accentColor": "#4285f4" },
+  "profiles": [
+    {
+      "id": "104726349812340987612",
+      "displayName": "Alice Developer",
+      "email": "alice@example.com",
+      "emailVerified": true,
+      "givenName": "Alice",
+      "familyName": "Developer",
+      "avatar": "https://lh3.googleusercontent.com/a/default-user",
+      "locale": "en",
+      "hostedDomain": "example.com",
+      "claims": { "role": "admin" }
+    },
+    {
+      "id": "104726349812340987613",
+      "displayName": "Bob Builder",
+      "email": "bob@example.com",
+      "emailVerified": true,
+      "givenName": "Bob",
+      "familyName": "Builder",
+      "locale": "en",
+      "hostedDomain": "example.com"
+    }
+  ]
+}

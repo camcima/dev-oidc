@@ -204,4 +204,49 @@ describe('admin profiles routes', () => {
     expect(res.statusCode).toBe(404);
     await app.close();
   });
+
+  it('preserves Google-style fields on create + edit round-trip', async () => {
+    const { app } = await buildApp();
+
+    const created = await app.inject({
+      method: 'POST',
+      url: '/admin/api/profiles',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        id: 'gina',
+        displayName: 'Gina Google',
+        email: 'gina@example.com',
+        givenName: 'Gina',
+        familyName: 'Google',
+        locale: 'en',
+        hostedDomain: 'example.com',
+        emailVerified: false,
+      }),
+    });
+    expect(created.statusCode).toBe(201);
+    expect((created.json() as Record<string, unknown>).hostedDomain).toBe('example.com');
+
+    const edited = await app.inject({
+      method: 'PUT',
+      url: '/admin/api/profiles/gina',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        id: 'gina',
+        displayName: 'Gina G.',
+        email: 'gina@example.com',
+        givenName: 'Gina',
+        familyName: 'Google',
+        locale: 'en',
+        hostedDomain: 'example.com',
+        emailVerified: false,
+      }),
+    });
+    expect(edited.statusCode).toBe(200);
+    const body = edited.json() as Record<string, unknown>;
+    expect(body.givenName).toBe('Gina');
+    expect(body.hostedDomain).toBe('example.com');
+    expect(body.emailVerified).toBe(false);
+
+    await app.close();
+  });
 });

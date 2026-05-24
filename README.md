@@ -23,6 +23,7 @@ When you build an app that integrates with an OIDC provider (Azure AD / Entra, A
 
 - **Full auth-code + PKCE** flow with redirect + login page + token exchange.
 - **Refresh tokens** with single-use rotation — each `/token` response carries a fresh `refresh_token`.
+- **`/userinfo` endpoint** — standard OIDC userinfo, so libraries that hydrate the user from userinfo (Passport, Spring Security) work locally.
 - **Profile tiles** on the login page — pick a user with one click, no password.
 - **Hot reload** of the config file — edit the JSON on disk or from another tool, no restart.
 - **Admin UI** at `/admin` for profile CRUD.
@@ -133,7 +134,7 @@ Compose snippet (Linux/WSL):
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     ports:
       - '8095:8095'
     volumes:
@@ -156,7 +157,7 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:0.3.1
+  ghcr.io/camcima/dev-oidc:0.4.0
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -172,7 +173,7 @@ The image listens on port `8095` inside the container. If you map it to a differ
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
@@ -440,6 +441,19 @@ The admin UI subscribes to a Server-Sent Events stream at `/admin/events`. When 
 **No authentication on `/admin`** — the default `127.0.0.1` bind is the only protection. If you run dev-oidc somewhere network-reachable, put it behind a firewall, reverse-proxy auth, or a VPN. dev-oidc is a development tool, not a production service.
 
 From the login page itself, a small "Manage profiles →" link jumps to `/admin` for quick iteration.
+
+---
+
+## Emulating Google Sign-In
+
+dev-oidc works as a local stand-in for Google SSO. Start from [`examples/google.config.json`](examples/google.config.json) and point your app's issuer/authority at dev-oidc in dev.
+
+1. **Issuer:** make it config-driven. In prod it's `https://accounts.google.com`; in dev it's your dev-oidc discovery URL (`http://localhost:8095/<slug>` in Hub mode, `http://localhost:8095` in legacy/Docker).
+2. **Audience / client_id:** Google sets the ID token `aud` to your OAuth client ID — dev-oidc does the same (`aud` = `clientId`). Use the same value for `clients[].clientId`.
+3. **Scopes:** request `openid profile email`. Identity claims are scope-gated: `profile` → `name`/`given_name`/`family_name`/`picture`/`locale`; `email` → `email`/`email_verified`. `hd` (Workspace hosted domain) is emitted whenever a profile sets `hostedDomain`.
+4. **userinfo:** `GET`/`POST /userinfo` with the access token returns the same scope-gated claims, so Passport's Google strategy and Spring's `oidcUserService` work unchanged.
+
+Caveat: Google access tokens are opaque; dev-oidc's are signed JWTs (more useful in dev). Don't write logic that depends on the access token being unparseable — read identity from the ID token or `/userinfo`.
 
 ---
 

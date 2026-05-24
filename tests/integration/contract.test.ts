@@ -77,7 +77,7 @@ describe('contract: tokens verify via real HTTP JWKS fetch', () => {
 
       expect(payload.oid).toBe('alice');
       expect(payload.sub).toBe('alice');
-      expect(payload.email).toBe('alice@example.com');
+      expect(payload.email).toBeUndefined();
     } finally {
       await server.close();
     }

@@ -7,12 +7,14 @@ export interface CodeRecord {
   nonce: string;
   redirectUri: string;
   scope: string;
+  authTime?: number;
 }
 
 export interface RefreshRecord {
   clientId: string;
   profileId: string;
   scope: string;
+  authTime?: number;
 }
 
 export interface CodeStoreOptions {

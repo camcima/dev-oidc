@@ -80,6 +80,33 @@ describe('CodeStore (refresh tokens)', () => {
   });
 });
 
+describe('CodeStore authTime', () => {
+  it('round-trips authTime on code records', () => {
+    const store = createCodeStore({ ttlMs: 60_000 });
+    const code = store.issue({
+      clientId: 'app',
+      profileId: 'alice',
+      codeChallenge: 'c',
+      nonce: 'n',
+      redirectUri: 'http://localhost/cb',
+      scope: 'openid',
+      authTime: 1700000000,
+    });
+    expect(store.consume(code)?.authTime).toBe(1700000000);
+  });
+
+  it('round-trips authTime on refresh records', () => {
+    const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
+    const token = store.issueRefresh({
+      clientId: 'app',
+      profileId: 'alice',
+      scope: 'openid',
+      authTime: 1700000000,
+    });
+    expect(store.consumeRefresh(token)?.authTime).toBe(1700000000);
+  });
+});
+
 describe('PendingAuthStore', () => {
   it('stores and retrieves by id; single-use', () => {
     const store = createPendingAuthStore({ ttlMs: 60_000 });

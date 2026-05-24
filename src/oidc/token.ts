@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Profile } from '@/config/schema.js';
-import { buildClaims } from '@/oidc/claims.js';
+import { assembleClaims } from '@/oidc/claims.js';
 
 export interface TokenDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -155,7 +155,15 @@ async function handleCodeGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(tenant, profile, record.clientId, record.nonce, record.scope, reply);
+  return issueTokenSet(
+    tenant,
+    profile,
+    record.clientId,
+    record.nonce,
+    record.scope,
+    record.authTime,
+    reply,
+  );
 }
 
 async function handleRefreshGrant(
@@ -180,7 +188,7 @@ async function handleRefreshGrant(
       .send({ error: 'invalid_grant', error_description: 'profile no longer exists' });
   }
 
-  return issueTokenSet(tenant, profile, record.clientId, '', record.scope, reply);
+  return issueTokenSet(tenant, profile, record.clientId, '', record.scope, record.authTime, reply);
 }
 
 async function issueTokenSet(
@@ -189,6 +197,7 @@ async function issueTokenSet(
   clientId: string,
   nonce: string,
   scope: string,
+  authTime: number | undefined,
   reply: FastifyReply,
 ): Promise<unknown> {
   const config = tenant.runtime.get();
@@ -196,9 +205,16 @@ async function issueTokenSet(
   if (!client) {
     return reply.code(400).send({ error: 'invalid_client' });
   }
-  const baseClaims = buildClaims({ profile, subjectClaim: config.subjectClaim });
+  const subjectClaim = config.subjectClaim;
+  const at = authTime ?? Math.floor(Date.now() / 1000);
 
-  const accessToken = await new jose.SignJWT({ ...baseClaims, scope })
+  const accessClaims = assembleClaims({
+    profile,
+    subjectClaim,
+    scope,
+    destination: 'access_token',
+  });
+  const accessToken = await new jose.SignJWT({ ...accessClaims, scope })
     .setProtectedHeader({
       alg: tenant.keyMaterial.alg,
       kid: tenant.keyMaterial.kid,
@@ -211,7 +227,20 @@ async function issueTokenSet(
     .setExpirationTime(`${config.tokenTtlSeconds}s`)
     .sign(tenant.keyMaterial.privateKey);
 
-  const idToken = await new jose.SignJWT({ ...baseClaims, nonce: nonce || undefined })
+  const atHash = createHash('sha256')
+    .update(accessToken)
+    .digest()
+    .subarray(0, 16)
+    .toString('base64url');
+
+  const idClaims = assembleClaims({ profile, subjectClaim, scope, destination: 'id_token' });
+  const idToken = await new jose.SignJWT({
+    ...idClaims,
+    nonce: nonce || undefined,
+    azp: clientId,
+    at_hash: atHash,
+    auth_time: at,
+  })
     .setProtectedHeader({
       alg: tenant.keyMaterial.alg,
       kid: tenant.keyMaterial.kid,
@@ -224,7 +253,12 @@ async function issueTokenSet(
     .setExpirationTime(`${config.tokenTtlSeconds}s`)
     .sign(tenant.keyMaterial.privateKey);
 
-  const refreshToken = tenant.codes.issueRefresh({ clientId, profileId: profile.id, scope });
+  const refreshToken = tenant.codes.issueRefresh({
+    clientId,
+    profileId: profile.id,
+    scope,
+    authTime: at,
+  });
 
   return reply.code(200).send({
     access_token: accessToken,

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+## [0.4.0] - 2026-05-24
+
+### Added
+
+- `/userinfo` endpoint (`GET`/`POST`), advertised via `userinfo_endpoint` in discovery, plus `claims_supported`.
+- First-class profile fields mapping to standard OIDC claims: `givenName`, `familyName`, `locale`, `hostedDomain`, `emailVerified`; `avatar` now also surfaces as the `picture` claim.
+- ID-token claims `azp`, `at_hash`, and `auth_time` (stable across refresh).
+- `examples/google.config.json` and a README "Emulating Google" section.
+
+### Changed (BREAKING)
+
+- Identity claims (`name`, `email`, `given_name`, …) are now **scope-gated** (`profile`/`email`) and emitted in the **ID token and `/userinfo` only** — they are no longer in the access token. Custom `profile.claims` are unaffected and remain in every token.
+  - **Migration:** read identity claims from the ID token or `/userinfo`, and make sure your app requests the `profile`/`email` scopes.
+
+### Changed
+
+- Refreshed in-range dependencies (lockfile only).
+
 ## [0.3.1] - 2026-05-03
 
 ### Fixed

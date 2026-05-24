@@ -124,6 +124,44 @@ describe('ConfigSchema', () => {
   });
 });
 
+function baseConfig(profileExtra: Record<string, unknown>) {
+  return {
+    signingKey: { kid: 'k1' },
+    clients: [{ clientId: 'app', redirectUris: ['http://localhost:3000/cb'], audience: 'api' }],
+    profiles: [{ id: 'alice', displayName: 'Alice', email: 'alice@example.com', ...profileExtra }],
+  };
+}
+
+describe('ProfileSchema Google fields', () => {
+  it('accepts the new optional identity fields', () => {
+    const parsed = ConfigSchema.parse(
+      baseConfig({
+        givenName: 'Alice',
+        familyName: 'Dev',
+        locale: 'en',
+        hostedDomain: 'example.com',
+        emailVerified: false,
+        avatar: 'https://example.com/a.png',
+      }),
+    );
+    const p = parsed.profiles[0]!;
+    expect(p.givenName).toBe('Alice');
+    expect(p.familyName).toBe('Dev');
+    expect(p.locale).toBe('en');
+    expect(p.hostedDomain).toBe('example.com');
+    expect(p.emailVerified).toBe(false);
+    expect(p.avatar).toBe('https://example.com/a.png');
+  });
+
+  it('leaves new fields undefined when omitted (no required defaults)', () => {
+    const parsed = ConfigSchema.parse(baseConfig({}));
+    const p = parsed.profiles[0]!;
+    expect(p.givenName).toBeUndefined();
+    expect(p.emailVerified).toBeUndefined();
+    expect(p.avatar).toBeNull(); // avatar keeps its existing default(null)
+  });
+});
+
 describe('Project ConfigSchema rejects misplaced TLS', () => {
   it('rejects a top-level tls field with the tailored message', () => {
     const result = ConfigSchema.safeParse({

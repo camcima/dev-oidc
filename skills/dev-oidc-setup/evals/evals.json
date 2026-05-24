@@ -63,6 +63,27 @@
         "The original 'alice' and 'bob' profiles are still present and unchanged",
         "The edited config still contains no `issuer`, `host`, or `port` fields (rejected by v0.2 schema)"
       ]
+    },
+    {
+      "id": 3,
+      "name": "wireup-google-sign-in",
+      "prompt": "Set up dev-oidc to emulate Google sign-in for this app. It's a Next.js app that uses next-auth with the Google provider. I want to test the full login flow locally without hitting real Google. Please create realistic-looking profiles with Google-style fields (given name, family name, hosted domain, etc.) and make sure name and email end up in the ID token.",
+      "expected_output": "A new dev-oidc.config.json at the repo root with subjectClaim 'sub' (the Google default), at least one client entry matching the app's OAuth clientId and redirectUri, and profiles that use the v0.4 Google-style fields: givenName, familyName, emailVerified, hostedDomain, locale, and avatar. The app's dev environment (e.g. .env.local) updated to point GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and the OAuth issuer/authority at dev-oidc. The scope configuration should request openid profile email so name and email land in the ID token and /userinfo. The config must NOT include issuer, host, or port.",
+      "files": ["fixtures/nextjs-next-auth-google"],
+      "expectations": [
+        "dev-oidc.config.json exists at the working directory root",
+        "dev-oidc.config.json is valid JSON and parses cleanly under the v0.2 schema (no issuer/host/port fields)",
+        "config.subjectClaim is 'sub' or absent (Google uses sub as the subject claim)",
+        "config.clients[] has at least one entry whose redirectUris contains the app's OAuth callback URI",
+        "config.profiles[] has at least 2 profiles",
+        "At least one profile uses the v0.4 givenName field",
+        "At least one profile uses the v0.4 familyName field",
+        "At least one profile uses the v0.4 hostedDomain field",
+        "At least one profile uses the v0.4 emailVerified field set to true",
+        "The app's dev environment (e.g. .env.local or .env.development) points the OIDC issuer / Google provider URL at the dev-oidc URL (http://localhost:8095 or http://localhost:8095/<slug>)",
+        "The scope configuration includes openid, profile, and email so identity claims are emitted in the ID token and /userinfo",
+        "Production .env or credentials were not modified"
+      ]
     }
   ]
 }

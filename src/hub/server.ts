@@ -23,6 +23,7 @@ import { registerAuthorize } from '@/oidc/authorize.js';
 import { registerComplete } from '@/oidc/complete.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
+import { registerUserInfo } from '@/oidc/userinfo.js';
 import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { renderHubDashboard, type DashboardTenant } from '@/admin/dashboard.js';
 import { renderAdminPage } from '@/admin/page.js';
@@ -255,6 +256,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
           issuer: tenant.issuer,
           signingAlg: tenant.keyMaterial.alg,
           authMethods,
+          subjectClaim: cfg.subjectClaim,
         });
       });
 
@@ -264,6 +266,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
       registerComplete(scope, { getTenant, pathPrefix: '/:slug' });
       registerToken(scope, { getTenant, pathPrefix: '/:slug' });
       registerLogout(scope, { getTenant, pathPrefix: '/:slug' });
+      registerUserInfo(scope, { getTenant, pathPrefix: '/:slug' });
     },
     { prefix: '' },
   );
