@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Identity claims (`name`, `email`, `given_name`, …) are now **scope-gated** (`profile`/`email`) and emitted in the **ID token and `/userinfo` only** — they are no longer in the access token. Custom `profile.claims` are unaffected and remain in every token.
   - **Migration:** read identity claims from the ID token or `/userinfo`, and make sure your app requests the `profile`/`email` scopes.
 
+### Changed
+
+- Refreshed in-range dependencies (lockfile only).
+
 ## [0.3.1] - 2026-05-03
 
 ### Fixed
