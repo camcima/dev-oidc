@@ -107,6 +107,16 @@ describe('integration: full auth-code + PKCE flow', () => {
       expect((payload as Record<string, unknown>).role).toBe('manager');
       expect(tokens.scope).toContain('openid');
       expect((payload as Record<string, unknown>).scope).toBe('openid profile email');
+
+      const userinfoRes = await server.app.inject({
+        method: 'GET',
+        url: '/userinfo',
+        headers: { authorization: `Bearer ${tokens.access_token}` },
+      });
+      expect(userinfoRes.statusCode).toBe(200);
+      const userinfo = userinfoRes.json() as Record<string, unknown>;
+      expect(userinfo.sub).toBe('bob');
+      expect(userinfo.email).toBe('bob@example.com');
     } finally {
       await server.close();
     }
