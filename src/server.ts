@@ -177,6 +177,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
       issuer: tenant.issuer,
       signingAlg: keyMaterial.alg,
       authMethods,
+      subjectClaim: cfg.subjectClaim,
     });
   });
 

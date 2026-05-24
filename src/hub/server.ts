@@ -256,6 +256,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
           issuer: tenant.issuer,
           signingAlg: tenant.keyMaterial.alg,
           authMethods,
+          subjectClaim: cfg.subjectClaim,
         });
       });
 

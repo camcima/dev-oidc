@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import formbody from '@fastify/formbody';
 import * as jose from 'jose';
 import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
@@ -42,6 +43,7 @@ async function buildApp() {
   const runtime = createRuntimeConfig(config);
   const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
   const app = Fastify();
+  await app.register(formbody);
   const tenant = {
     slug: '(legacy)',
     configPath: '/dev/null',
@@ -140,6 +142,42 @@ describe('GET/POST /userinfo', () => {
       method: 'GET',
       url: '/userinfo',
       headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['www-authenticate']).toMatch(/invalid_token/);
+    await app.close();
+  });
+
+  it('accepts the access token via the access_token form-body param on POST', async () => {
+    const { app, keyMaterial } = await buildApp();
+    const token = await mintAccessToken(keyMaterial, 'openid email');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/userinfo',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({ access_token: token }).toString(),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.sub).toBe('alice');
+    expect(body.email).toBe('alice@example.com');
+    await app.close();
+  });
+
+  it('401 invalid_token for a non-access token (no scope claim, e.g. an ID token)', async () => {
+    const { app, keyMaterial } = await buildApp();
+    const idLikeToken = await new jose.SignJWT({})
+      .setProtectedHeader({ alg: 'RS256', kid: keyMaterial.kid, typ: 'JWT' })
+      .setIssuer('http://localhost:8095')
+      .setAudience('my-app')
+      .setSubject('alice')
+      .setIssuedAt()
+      .setExpirationTime('900s')
+      .sign(keyMaterial.privateKey);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/userinfo',
+      headers: { authorization: `Bearer ${idLikeToken}` },
     });
     expect(res.statusCode).toBe(401);
     expect(res.headers['www-authenticate']).toMatch(/invalid_token/);
