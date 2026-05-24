@@ -134,7 +134,7 @@ Compose snippet (Linux/WSL):
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     ports:
       - '8095:8095'
     volumes:
@@ -157,7 +157,7 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:0.3.1
+  ghcr.io/camcima/dev-oidc:0.4.0
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -173,7 +173,7 @@ The image listens on port `8095` inside the container. If you map it to a differ
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.3.1
+    image: ghcr.io/camcima/dev-oidc:0.4.0
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
