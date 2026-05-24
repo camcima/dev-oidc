@@ -44,4 +44,17 @@ describe('buildDiscoveryDocument', () => {
     });
     expect(doc.issuer).toBe('http://localhost:8095');
   });
+
+  it('advertises userinfo_endpoint and claims_supported', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
+    expect(doc.userinfo_endpoint).toBe('http://localhost:8095/userinfo');
+    expect(doc.claims_supported).toContain('sub');
+    expect(doc.claims_supported).toContain('email_verified');
+    expect(doc.claims_supported).toContain('at_hash');
+    expect(doc.claims_supported).toContain('hd');
+  });
 });
