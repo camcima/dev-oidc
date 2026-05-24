@@ -125,4 +125,24 @@ describe('GET/POST /userinfo', () => {
     expect(res.headers['www-authenticate']).toMatch(/invalid_token/);
     await app.close();
   });
+
+  it('401 invalid_token when the token is expired', async () => {
+    const { app, keyMaterial } = await buildApp();
+    const token = await new jose.SignJWT({ scope: 'openid' })
+      .setProtectedHeader({ alg: 'RS256', kid: keyMaterial.kid, typ: 'JWT' })
+      .setIssuer('http://localhost:8095')
+      .setAudience('my-api')
+      .setSubject('alice')
+      .setIssuedAt()
+      .setExpirationTime('-1s')
+      .sign(keyMaterial.privateKey);
+    const res = await app.inject({
+      method: 'GET',
+      url: '/userinfo',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['www-authenticate']).toMatch(/invalid_token/);
+    await app.close();
+  });
 });

@@ -10,7 +10,10 @@ export interface UserInfoDeps {
 
 function unauthorized(reply: FastifyReply, withError: boolean): FastifyReply {
   const challenge = withError ? 'Bearer error="invalid_token"' : 'Bearer';
-  return reply.code(401).header('www-authenticate', challenge).send({ error: 'invalid_token' });
+  return reply
+    .code(401)
+    .header('www-authenticate', challenge)
+    .send(withError ? { error: 'invalid_token' } : {});
 }
 
 export function registerUserInfo(app: FastifyInstance, deps: UserInfoDeps): void {
