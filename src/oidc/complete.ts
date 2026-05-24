@@ -56,6 +56,7 @@ export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void
       nonce: pending.nonce,
       redirectUri: allowedUri,
       scope: pending.scope,
+      authTime: Math.floor(Date.now() / 1000),
     });
 
     // allowedUri is sourced directly from client.redirectUris (config constant).
