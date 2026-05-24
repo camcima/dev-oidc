@@ -26,6 +26,11 @@ const ProfileSchema = z.object({
   displayName: z.string().min(1),
   email: z.string().email(),
   avatar: z.string().url().nullable().default(null),
+  emailVerified: z.boolean().optional(),
+  givenName: z.string().min(1).optional(),
+  familyName: z.string().min(1).optional(),
+  locale: z.string().min(1).optional(),
+  hostedDomain: z.string().min(1).optional(),
   claims: z.record(z.string(), z.unknown()).default({}),
 });
 
