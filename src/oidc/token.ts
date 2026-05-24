@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Profile } from '@/config/schema.js';
-import { buildClaims } from '@/oidc/claims.js';
+import { assembleClaims } from '@/oidc/claims.js';
 
 export interface TokenDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -196,7 +196,12 @@ async function issueTokenSet(
   if (!client) {
     return reply.code(400).send({ error: 'invalid_client' });
   }
-  const baseClaims = buildClaims({ profile, subjectClaim: config.subjectClaim });
+  const baseClaims = assembleClaims({
+    profile,
+    subjectClaim: config.subjectClaim,
+    scope,
+    destination: 'id_token',
+  });
 
   const accessToken = await new jose.SignJWT({ ...baseClaims, scope })
     .setProtectedHeader({
