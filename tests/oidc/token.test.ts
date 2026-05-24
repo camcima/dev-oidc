@@ -103,7 +103,7 @@ describe('POST /token (authorization_code)', () => {
       { issuer: 'http://localhost:8095', audience: 'my-api' },
     );
     expect(payload.sub).toBe('alice');
-    expect(payload.email).toBe('a@x.com');
+    expect(payload.email).toBeUndefined();
     expect((payload as Record<string, unknown>).role).toBe('admin');
     expect((payload as Record<string, unknown>).scope).toBe('openid profile custom_scope');
     expect((res.json() as { scope: string }).scope).toBe('openid profile custom_scope');
