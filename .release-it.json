@@ -10,7 +10,7 @@
     "push": true
   },
   "github": {
-    "release": false
+    "release": true
   },
   "npm": {
     "publish": true
