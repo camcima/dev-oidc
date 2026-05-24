@@ -22,6 +22,7 @@ import { createCodeStore } from '@/oidc/codes.js';
 import { createPendingAuthStore } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
+import { registerUserInfo } from '@/oidc/userinfo.js';
 import { renderIndexPage } from '@/index/page.js';
 import { pickRedirectHost, stripTrailingSlash } from '@/hub/issuer.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
@@ -193,6 +194,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   registerComplete(app, { getTenant });
   registerToken(app, { getTenant });
   registerLogout(app, { getTenant });
+  registerUserInfo(app, { getTenant });
 
   if (options.configFilePath) {
     registerProfilesRoutes(app, { getTenant });
