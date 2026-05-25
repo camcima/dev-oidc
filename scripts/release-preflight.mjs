@@ -15,7 +15,7 @@
 const TOKEN_REF = 'GITHUB_TOKEN';
 const token = process.env[TOKEN_REF];
 
-if (typeof token === 'string' && token.length > 0) {
+if (typeof token === 'string' && token.trim().length > 0) {
   process.exit(0);
 }
 
