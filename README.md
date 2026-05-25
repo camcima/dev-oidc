@@ -531,7 +531,7 @@ dev-oidc ships to two registries: **npm** (the `dev-oidc` package) and **GHCR** 
 npm run release
 ```
 
-`release-it` runs typecheck, lint, formatting checks, and tests; bumps `package.json` and `package-lock.json`; builds `dist`; verifies the npm package with `npm pack --dry-run`; then commits, tags `v${version}`, pushes, publishes to npm, and creates a GitHub Release for the tag. Export a `GITHUB_TOKEN` (e.g. `export GITHUB_TOKEN=$(gh auth token)`) so release-it can call the GitHub API for the Release step.
+`release-it` runs typecheck, lint, formatting checks, and tests; bumps `package.json` and `package-lock.json`; builds `dist`; verifies the npm package with `npm pack --dry-run`; then commits, tags `v${version}`, pushes, publishes to npm, and creates a GitHub Release for the tag. Export a `GITHUB_TOKEN` (e.g. `export GITHUB_TOKEN=$(gh auth token)`) so release-it can call the GitHub API for the Release step. A preflight check fails the release immediately if `GITHUB_TOKEN` is unset — without it release-it would silently skip the GitHub Release (it falls back to a no-op web release) while still publishing to npm and pushing the tag. Dry runs (`release:dry`) skip this check.
 
 For the current alpha line use `npm run release:alpha`. Use `npm run release:dry` to preview without writing changes.
 
