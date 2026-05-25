@@ -107,6 +107,52 @@ describe('CodeStore authTime', () => {
   });
 });
 
+describe('CodeStore expiry sweep and size cap', () => {
+  function sampleCode(): Parameters<ReturnType<typeof createCodeStore>['issue']>[0] {
+    return {
+      clientId: 'c1',
+      profileId: 'alice',
+      codeChallenge: 'xyz',
+      nonce: 'n1',
+      redirectUri: 'http://localhost/cb',
+      scope: 'openid',
+    };
+  }
+
+  it('sweeps expired authorization codes on the next issue', () => {
+    vi.useFakeTimers();
+    const store = createCodeStore({ ttlMs: 1_000 });
+    store.issue(sampleCode());
+    expect(store.size()).toBe(1);
+    vi.advanceTimersByTime(1_500);
+    // The expired code was never consumed; issuing a new one should reclaim it.
+    store.issue(sampleCode());
+    expect(store.size()).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it('sweeps expired refresh tokens on the next issueRefresh', () => {
+    vi.useFakeTimers();
+    const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 1_000 });
+    store.issueRefresh({ clientId: 'c1', profileId: 'alice', scope: 'openid' });
+    vi.advanceTimersByTime(1_500);
+    store.issueRefresh({ clientId: 'c1', profileId: 'alice', scope: 'openid' });
+    expect(store.size()).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it('caps the number of live entries, evicting the oldest', () => {
+    const store = createCodeStore({ ttlMs: 60_000, maxEntries: 2 });
+    const a = store.issue(sampleCode());
+    const b = store.issue(sampleCode());
+    const c = store.issue(sampleCode());
+    expect(store.size()).toBe(2);
+    expect(store.consume(a)).toBeNull(); // evicted as the oldest
+    expect(store.consume(b)?.profileId).toBe('alice');
+    expect(store.consume(c)?.profileId).toBe('alice');
+  });
+});
+
 describe('PendingAuthStore', () => {
   it('stores and retrieves by id; single-use', () => {
     const store = createPendingAuthStore({ ttlMs: 60_000 });
@@ -123,5 +169,37 @@ describe('PendingAuthStore', () => {
     const rec = store.consume(id);
     expect(rec?.clientId).toBe('c1');
     expect(store.consume(id)).toBeNull();
+  });
+
+  function samplePending(): Parameters<ReturnType<typeof createPendingAuthStore>['create']>[0] {
+    return {
+      clientId: 'c1',
+      redirectUri: 'http://localhost/cb',
+      codeChallenge: 'xyz',
+      codeChallengeMethod: 'S256',
+      nonce: 'n1',
+      state: 's1',
+      scope: 'openid',
+    };
+  }
+
+  it('sweeps expired pending records on the next create', () => {
+    vi.useFakeTimers();
+    const store = createPendingAuthStore({ ttlMs: 1_000 });
+    store.create(samplePending());
+    expect(store.size()).toBe(1);
+    vi.advanceTimersByTime(1_500);
+    store.create(samplePending());
+    expect(store.size()).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it('caps the number of live pending records, evicting the oldest', () => {
+    const store = createPendingAuthStore({ ttlMs: 60_000, maxEntries: 2 });
+    const a = store.create(samplePending());
+    store.create(samplePending());
+    store.create(samplePending());
+    expect(store.size()).toBe(2);
+    expect(store.consume(a)).toBeNull();
   });
 });
