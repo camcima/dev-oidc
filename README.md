@@ -153,6 +153,8 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 
 ## Run mode 2 — Docker (recommended for teams)
 
+> **Where the image lives:** the container image is published to the **GitHub Container Registry (GHCR)** at `ghcr.io/camcima/dev-oidc` — **not** Docker Hub. Always use the fully-qualified `ghcr.io/camcima/dev-oidc:<version>` reference. A bare name like `dev-oidc` or `camcima2/dev-oidc` resolves to Docker Hub, where no image is published, and the pull will fail. Browse tags at <https://github.com/camcima/dev-oidc/pkgs/container/dev-oidc>.
+
 ```bash
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
