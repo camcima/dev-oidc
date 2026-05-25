@@ -7,6 +7,8 @@ description: Use this skill whenever the user wants to set up, configure, or edi
 
 Wire `dev-oidc` into a developer's local environment, or edit an existing `dev-oidc.config.json`. Always work inside the **consumer app's** repo (the one that needs an OIDC provider) — not inside the dev-oidc repo itself. Read what's already there, mirror its OIDC settings, and add only what's needed so `docker compose up` (or the project's existing dev command) starts the app pointing at dev-oidc instead of the real IdP. The user's auth code path should not need to change — only configuration.
 
+> **Container image registry — read before any `docker run`/compose snippet.** The dev-oidc image is published to the **GitHub Container Registry (GHCR)** at `ghcr.io/camcima/dev-oidc` — it is **not** on Docker Hub. Every `image:`/`docker run` reference must be the fully-qualified `ghcr.io/camcima/dev-oidc:<version>`. Never shorten it to `dev-oidc` or `camcima2/dev-oidc`: Docker resolves bare names against Docker Hub, where no dev-oidc image exists, so the pull fails. Use the version pinned in the snippets below (currently `0.4.0`) or `:latest`.
+
 ## What changed in v0.2 (read this first)
 
 dev-oidc 0.2 introduced **Hub mode** as the default run mode. Three implications for any wire-up:
