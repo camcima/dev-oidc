@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeIssuer,
   deriveDefaultPublicUrl,
+  formatHostPort,
   isBindAllHost,
   pickRedirectHost,
   requirePublicUrlOrSafeHost,
@@ -48,6 +49,26 @@ describe('deriveDefaultPublicUrl', () => {
     expect(deriveDefaultPublicUrl({ host: '127.0.0.1', port: 8095, tlsEnabled: true })).toBe(
       'https://127.0.0.1:8095',
     );
+  });
+
+  it('brackets an IPv6 loopback host', () => {
+    expect(deriveDefaultPublicUrl({ host: '::1', port: 8095 })).toBe('http://[::1]:8095');
+  });
+});
+
+describe('formatHostPort', () => {
+  it('joins an IPv4/hostname host with its port directly', () => {
+    expect(formatHostPort('127.0.0.1', 8095)).toBe('127.0.0.1:8095');
+    expect(formatHostPort('localhost', 8095)).toBe('localhost:8095');
+  });
+
+  it('wraps a bare IPv6 host in brackets', () => {
+    expect(formatHostPort('::1', 8095)).toBe('[::1]:8095');
+    expect(formatHostPort('fe80::1', 3000)).toBe('[fe80::1]:3000');
+  });
+
+  it('does not double-bracket an already-bracketed IPv6 host', () => {
+    expect(formatHostPort('[::1]', 8095)).toBe('[::1]:8095');
   });
 });
 

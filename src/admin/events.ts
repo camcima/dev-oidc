@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 
 export type AdminEvent = { type: 'config-changed'; slug: string };
@@ -25,12 +26,22 @@ export interface EventsDeps {
 }
 
 export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): void {
+  // Track open SSE responses so server shutdown can close them. Without this,
+  // app.close() blocks waiting for these long-lived keep-alive connections.
+  const active = new Set<ServerResponse>();
+  app.addHook('onClose', () => {
+    for (const res of [...active]) {
+      if (!res.writableEnded) res.end();
+    }
+  });
+
   app.get('/admin/events', (request, reply) => {
     reply.raw.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache',
       connection: 'keep-alive',
     });
+    active.add(reply.raw);
 
     const send = (event: AdminEvent): void => {
       reply.raw.write(`event: ${event.type}\n`);
@@ -45,6 +56,7 @@ export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): voi
       cleanedUp = true;
       clearInterval(keepalive);
       unsubscribe();
+      active.delete(reply.raw);
     };
 
     const keepalive = setInterval(() => {

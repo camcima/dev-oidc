@@ -16,7 +16,13 @@
     "publish": true
   },
   "hooks": {
-    "before:init": ["npm run typecheck", "npm run lint", "npm run format:check", "npm test"],
+    "before:init": [
+      "node scripts/release-preflight.mjs",
+      "npm run typecheck",
+      "npm run lint",
+      "npm run format:check",
+      "npm test"
+    ],
     "after:bump": ["npm run build", "npm pack --dry-run"]
   }
 }

@@ -1,6 +1,6 @@
 import { loadConfig } from '@/config/loader.js';
 import { createDevOidcServer, type DevOidcServer } from '@/server.js';
-import { requirePublicUrlOrSafeHost, stripTrailingSlash } from '@/hub/issuer.js';
+import { formatHostPort, requirePublicUrlOrSafeHost, stripTrailingSlash } from '@/hub/issuer.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
 import path from 'node:path';
@@ -81,7 +81,7 @@ export async function startLegacy(options: LegacyStartOptions): Promise<LegacySt
 
   const scheme = tlsMaterial ? 'https' : 'http';
   const issuer = stripTrailingSlash(
-    options.publicUrl ?? `${scheme}://${options.host}:${options.port}`,
+    options.publicUrl ?? `${scheme}://${formatHostPort(options.host, options.port)}`,
   );
   const server = await createDevOidcServer({
     config,

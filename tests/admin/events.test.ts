@@ -32,6 +32,7 @@ describe('events', () => {
       ): void => {
         void Promise.resolve(handler(fakeRequest, fakeReply));
       },
+      addHook: (): void => undefined,
     } as unknown as FastifyInstance;
     registerEventsRoute(app, { emitter });
 
@@ -72,6 +73,7 @@ describe('events', () => {
       ): void => {
         void Promise.resolve(handler(fakeRequest, fakeReply));
       },
+      addHook: (): void => undefined,
     } as unknown as FastifyInstance;
     registerEventsRoute(app, { emitter });
 
@@ -130,12 +132,15 @@ describe('events keepalive', () => {
     finishHandlers: Array<() => void>;
     errorHandlers: Array<() => void>;
     requestCloseHandlers: Array<() => void>;
+    closeHooks: Array<() => unknown>;
     fakeReply: {
       raw: {
         writeHead: () => void;
         write: (s: string) => boolean;
         on: (event: string, fn: () => void) => void;
+        end: () => void;
         writableEnded: boolean;
+        endCalls: number;
       };
     };
     fakeRequest: { raw: { on: (event: string, fn: () => void) => void } };
@@ -145,28 +150,34 @@ describe('events keepalive', () => {
     const finishHandlers: Array<() => void> = [];
     const errorHandlers: Array<() => void> = [];
     const requestCloseHandlers: Array<() => void> = [];
+    const closeHooks: Array<() => unknown> = [];
     const writes: string[] = [];
+    const raw = {
+      writeHead: (): void => undefined,
+      write: (s: string): boolean => {
+        writes.push(s);
+        return true;
+      },
+      on: (event: string, fn: () => void): void => {
+        if (event === 'close') closeHandlers.push(fn);
+        else if (event === 'finish') finishHandlers.push(fn);
+        else if (event === 'error') errorHandlers.push(fn);
+      },
+      end: (): void => {
+        raw.endCalls += 1;
+        raw.writableEnded = true;
+      },
+      writableEnded: false,
+      endCalls: 0,
+    };
     return {
       closeHandlers,
       finishHandlers,
       errorHandlers,
       requestCloseHandlers,
+      closeHooks,
       writes,
-      fakeReply: {
-        raw: {
-          writeHead: (): void => undefined,
-          write: (s: string): boolean => {
-            writes.push(s);
-            return true;
-          },
-          on: (event: string, fn: () => void): void => {
-            if (event === 'close') closeHandlers.push(fn);
-            else if (event === 'finish') finishHandlers.push(fn);
-            else if (event === 'error') errorHandlers.push(fn);
-          },
-          writableEnded: false,
-        },
-      },
+      fakeReply: { raw },
       fakeRequest: {
         raw: {
           on: (event: string, fn: () => void): void => {
@@ -185,6 +196,9 @@ describe('events keepalive', () => {
         handler: (req: typeof h.fakeRequest, reply: typeof h.fakeReply) => void,
       ): void => {
         handler(h.fakeRequest, h.fakeReply);
+      },
+      addHook: (event: string, fn: () => unknown): void => {
+        if (event === 'onClose') h.closeHooks.push(fn);
       },
     } as unknown as FastifyInstance;
     registerEventsRoute(app, { emitter });
@@ -245,5 +259,28 @@ describe('events keepalive', () => {
     h.requestCloseHandlers[0]!();
     expect(() => h.finishHandlers[0]!()).not.toThrow();
     expect(() => h.errorHandlers[0]!()).not.toThrow();
+  });
+
+  it('registers an onClose hook that ends active SSE responses', async () => {
+    const h = harness();
+    mountHandler(h);
+    expect(h.closeHooks).toHaveLength(1);
+    expect(h.fakeReply.raw.endCalls).toBe(0);
+
+    await h.closeHooks[0]!(); // server shutdown
+
+    expect(h.fakeReply.raw.endCalls).toBe(1);
+    // The keepalive interval must also stop so nothing keeps the loop alive.
+    h.writes.length = 0;
+    vi.advanceTimersByTime(60_000);
+    expect(h.writes).toEqual([]);
+  });
+
+  it('does not end an SSE response that already closed before shutdown', async () => {
+    const h = harness();
+    mountHandler(h);
+    h.requestCloseHandlers[0]!(); // client disconnected first
+    await h.closeHooks[0]!();
+    expect(h.fakeReply.raw.endCalls).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { DEFAULT_MAX_ENTRIES, type Entry, evictForInsert } from '@/oidc/expiring-map.js';
 
 export interface CodeRecord {
   clientId: string;
@@ -20,6 +21,9 @@ export interface RefreshRecord {
 export interface CodeStoreOptions {
   ttlMs: number;
   refreshTtlMs?: number;
+  // Hard cap on live entries per map (codes, refresh) to bound memory in a
+  // long-running hub. Defaults to 10k, far above any realistic local-dev load.
+  maxEntries?: number;
 }
 
 export interface CodeStore {
@@ -27,23 +31,22 @@ export interface CodeStore {
   consume: (code: string) => CodeRecord | null;
   issueRefresh: (record: RefreshRecord) => string;
   consumeRefresh: (token: string) => RefreshRecord | null;
-}
-
-interface Entry<T> {
-  value: T;
-  expiresAt: number;
+  /** Total live entries (codes + refresh tokens). For observability/tests. */
+  size: () => number;
 }
 
 export function createCodeStore(options: CodeStoreOptions): CodeStore {
   const codes = new Map<string, Entry<CodeRecord>>();
   const refresh = new Map<string, Entry<RefreshRecord>>();
   const refreshTtlMs = options.refreshTtlMs ?? 8 * 60 * 60 * 1_000;
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
 
   const mint = (bytes: number): string => randomBytes(bytes).toString('base64url');
   const isExpired = (e: Entry<unknown>): boolean => Date.now() > e.expiresAt;
 
   return {
     issue(record) {
+      evictForInsert(codes, maxEntries);
       const code = mint(32);
       codes.set(code, { value: record, expiresAt: Date.now() + options.ttlMs });
       return code;
@@ -56,6 +59,7 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return entry.value;
     },
     issueRefresh(record) {
+      evictForInsert(refresh, maxEntries);
       const token = mint(48);
       refresh.set(token, { value: record, expiresAt: Date.now() + refreshTtlMs });
       return token;
@@ -66,6 +70,9 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       refresh.delete(token);
       if (isExpired(entry)) return null;
       return entry.value;
+    },
+    size() {
+      return codes.size + refresh.size;
     },
   };
 }

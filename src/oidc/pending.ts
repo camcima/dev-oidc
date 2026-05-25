@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { DEFAULT_MAX_ENTRIES, type Entry, evictForInsert } from '@/oidc/expiring-map.js';
 
 export interface PendingAuth {
   clientId: string;
@@ -12,23 +13,24 @@ export interface PendingAuth {
 
 export interface PendingAuthStoreOptions {
   ttlMs: number;
+  // Hard cap on live pending records to bound memory in a long-running hub.
+  maxEntries?: number;
 }
 
 export interface PendingAuthStore {
   create: (record: PendingAuth) => string;
   consume: (id: string) => PendingAuth | null;
-}
-
-interface Entry {
-  value: PendingAuth;
-  expiresAt: number;
+  /** Live pending-record count. For observability/tests. */
+  size: () => number;
 }
 
 export function createPendingAuthStore(options: PendingAuthStoreOptions): PendingAuthStore {
-  const store = new Map<string, Entry>();
+  const store = new Map<string, Entry<PendingAuth>>();
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
 
   return {
     create(record) {
+      evictForInsert(store, maxEntries);
       const id = randomBytes(24).toString('base64url');
       store.set(id, { value: record, expiresAt: Date.now() + options.ttlMs });
       return id;
@@ -39,6 +41,9 @@ export function createPendingAuthStore(options: PendingAuthStoreOptions): Pendin
       store.delete(id);
       if (Date.now() > entry.expiresAt) return null;
       return entry.value;
+    },
+    size() {
+      return store.size;
     },
   };
 }

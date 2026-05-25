@@ -12,13 +12,24 @@ export function isBindAllHost(host: string): boolean {
   return BIND_ALL_HOSTS.has(host);
 }
 
+/**
+ * Builds a `host:port` URL authority, bracketing bare IPv6 hosts so the
+ * result is a valid URL. `::1` becomes `[::1]:8095`; IPv4/hostname hosts and
+ * already-bracketed IPv6 hosts pass through unchanged.
+ */
+export function formatHostPort(host: string, port: number): string {
+  const needsBrackets = host.includes(':') && !host.startsWith('[');
+  const authorityHost = needsBrackets ? `[${host}]` : host;
+  return `${authorityHost}:${port.toString()}`;
+}
+
 export function deriveDefaultPublicUrl(input: {
   host: string;
   port: number;
   tlsEnabled?: boolean;
 }): string {
   const scheme = input.tlsEnabled ? 'https' : 'http';
-  return `${scheme}://${input.host}:${input.port}`;
+  return `${scheme}://${formatHostPort(input.host, input.port)}`;
 }
 
 /**

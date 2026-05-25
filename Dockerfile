@@ -27,13 +27,24 @@ ENV XDG_CACHE_HOME=/data
 # and signs leaves for the configured hostnames. Alpine 3.23 has no apk
 # package for mkcert, so we download the official release binary. Pinned
 # version, multi-arch via TARGETARCH (linux/amd64 + linux/arm64). ~5MB.
+# The download is verified against a pinned per-arch SHA256 so a tampered or
+# swapped release asset fails the build. Update both digests when bumping
+# MKCERT_VERSION.
 ARG TARGETARCH
 ARG MKCERT_VERSION=v1.4.4
+ARG MKCERT_SHA256_amd64=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+ARG MKCERT_SHA256_arm64=b98f2cc69fd9147fe4d405d859c57504571adec0d3611c3eefd04107c7ac00d0
 RUN apk add --no-cache ca-certificates && \
+    case "$TARGETARCH" in \
+      amd64) expected="$MKCERT_SHA256_amd64" ;; \
+      arm64) expected="$MKCERT_SHA256_arm64" ;; \
+      *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
     wget -qO /usr/local/bin/mkcert \
       "https://github.com/FiloSottile/mkcert/releases/download/${MKCERT_VERSION}/mkcert-${MKCERT_VERSION}-linux-${TARGETARCH}" && \
+    echo "${expected}  /usr/local/bin/mkcert" | sha256sum -c - && \
     chmod +x /usr/local/bin/mkcert && \
-    /usr/local/bin/mkcert -version 2>/dev/null || /usr/local/bin/mkcert --help >/dev/null
+    { /usr/local/bin/mkcert -version 2>/dev/null || /usr/local/bin/mkcert --help >/dev/null; }
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts

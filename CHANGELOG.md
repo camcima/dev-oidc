@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Fixed
+
+- **`/token` requires `redirect_uri` on the authorization-code grant.** Per RFC 6749 §4.1.3 the value sent at `/authorize` must be repeated at `/token`; the handler previously only compared it when supplied, so an exchange omitting it still issued tokens. It is now required (`invalid_request`) and compared unconditionally (`invalid_grant`), matching real OIDC providers and surfacing relying-party bugs.
+- **Auth-state stores are bounded.** Authorization codes, refresh tokens, and pending-login records lived in unbounded maps that only shed entries on consume, so expired-but-never-presented entries leaked for the life of a hub. Each insert now sweeps expired entries and enforces a max-entry cap (oldest evicted).
+- **Active `/admin/events` SSE streams no longer block shutdown.** Open Server-Sent-Events responses were never closed on shutdown, so `app.close()` (SIGINT/SIGTERM) hung while an admin page was open. They are now ended via an `onClose` hook.
+- **IPv6 loopback issuer URLs are well-formed.** Binding `--host ::1` without `--public-url` produced `http://::1:8095`; bare IPv6 hosts are now bracketed (`http://[::1]:8095`).
+- **Admin URLs percent-encode profile ids.** Profile ids are unconstrained strings but were interpolated raw into edit/delete paths, so a `/`, `?`, or `#` broke the URL. Ids are now encoded as a single path segment.
+
+### Security
+
+- **Docker build verifies the mkcert download.** The pinned `mkcert` binary is now checked against a per-arch SHA256 before use, so a tampered or swapped release asset fails the build.
+
+### Changed
+
+- **Releases fail fast without `GITHUB_TOKEN`.** With `github.release` enabled, release-it silently falls back to a no-op web release when the token is absent (publishing to npm and pushing the tag but creating no GitHub Release). A `before:init` preflight now hard-stops the release if `GITHUB_TOKEN` is unset; dry runs are unaffected.
+
 ## [0.4.0] - 2026-05-24
 
 ### Added
