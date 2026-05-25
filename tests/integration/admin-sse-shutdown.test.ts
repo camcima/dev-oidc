@@ -17,6 +17,10 @@ describe('admin SSE shutdown (real server lifecycle)', () => {
     const port = Number(new URL(addr).port);
 
     let client: http.IncomingMessage | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // close() must start only after the SSE stream is in-flight, so it is
+    // created inside the try. The same promise is awaited in finally.
+    let closePromise: Promise<undefined> | undefined;
     try {
       client = await new Promise<http.IncomingMessage>((resolve, reject) => {
         const req = http.get({ host: '127.0.0.1', port, path: '/admin/events' }, resolve);
@@ -26,16 +30,20 @@ describe('admin SSE shutdown (real server lifecycle)', () => {
       client.on('error', () => {}); // ignore the reset when the server ends it
       expect(client.statusCode).toBe(200);
 
+      closePromise = app.close();
       const closedWithin = await Promise.race([
-        app.close().then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1500)),
+        closePromise.then(() => true),
+        new Promise<boolean>((resolve) => {
+          timer = setTimeout(() => resolve(false), 1500);
+        }),
       ]);
       expect(closedWithin).toBe(true);
     } finally {
+      if (timer) clearTimeout(timer);
       // If the assertion failed (close still pending), destroying the client
       // ends the stream so the dangling close resolves and the server frees up.
       client?.destroy();
-      await app.close().catch(() => undefined);
+      await (closePromise ?? app.close()).catch(() => undefined);
     }
   });
 });
