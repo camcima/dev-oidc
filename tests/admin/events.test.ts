@@ -16,6 +16,7 @@ describe('events', () => {
           writtenStatus = status;
           writtenHeaders = headers;
         },
+        flushHeaders: (): void => undefined,
         write: (): boolean => true,
         on: (): void => undefined,
         writableEnded: false,
@@ -53,6 +54,7 @@ describe('events', () => {
     const fakeReply = {
       raw: {
         writeHead: (): void => undefined,
+        flushHeaders: (): void => undefined,
         write: (chunk: string): boolean => {
           writes.push(chunk);
           return true;
@@ -136,6 +138,7 @@ describe('events keepalive', () => {
     fakeReply: {
       raw: {
         writeHead: () => void;
+        flushHeaders: () => void;
         write: (s: string) => boolean;
         on: (event: string, fn: () => void) => void;
         end: () => void;
@@ -154,6 +157,7 @@ describe('events keepalive', () => {
     const writes: string[] = [];
     const raw = {
       writeHead: (): void => undefined,
+      flushHeaders: (): void => undefined,
       write: (s: string): boolean => {
         writes.push(s);
         return true;
@@ -198,7 +202,7 @@ describe('events keepalive', () => {
         handler(h.fakeRequest, h.fakeReply);
       },
       addHook: (event: string, fn: () => unknown): void => {
-        if (event === 'onClose') h.closeHooks.push(fn);
+        if (event === 'preClose') h.closeHooks.push(fn);
       },
     } as unknown as FastifyInstance;
     registerEventsRoute(app, { emitter });
@@ -261,7 +265,7 @@ describe('events keepalive', () => {
     expect(() => h.errorHandlers[0]!()).not.toThrow();
   });
 
-  it('registers an onClose hook that ends active SSE responses', async () => {
+  it('registers a preClose hook that ends active SSE responses', async () => {
     const h = harness();
     mountHandler(h);
     expect(h.closeHooks).toHaveLength(1);
