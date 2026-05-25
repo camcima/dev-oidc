@@ -535,7 +535,7 @@ npm run release
 
 For the current alpha line use `npm run release:alpha`. Use `npm run release:dry` to preview without writing changes.
 
-> **Don't bump the version inside feature PRs** — let `release-it` own the bump. If the version in `package.json` is already bumped before you release (e.g. it was bumped in a merged PR), `npm run release` would try to bump again. In that case publish the already-committed version with `npx release-it --no-increment --no-git.commit --ci`, which keeps the current version, skips the (empty) release commit, and still builds, publishes, tags, pushes, and creates the GitHub Release.
+> **Don't bump the version inside feature PRs** — let `release-it` own the bump. If the version in `package.json` is already bumped before you release (e.g. it was bumped in a merged PR), `npm run release` would try to bump again. In that case publish the already-committed version with `npm run release -- --no-increment --no-git.commit --ci`, which keeps the current version, skips the (empty) release commit, and still builds, publishes, tags, pushes, and creates the GitHub Release.
 
 ### Docker only (GitHub Actions, GHCR)
 
