@@ -119,6 +119,15 @@ describe('renderAdminPage', () => {
     expect(html).toContain('data-api="/admin/api/profiles/alice"');
   });
 
+  it('percent-encodes profile ids in the data-api path so path-breaking chars stay one segment', () => {
+    const cfg = config();
+    cfg.profiles[0]!.id = 'weird/id#frag';
+    const html = renderAdminPage({ config: cfg, slug: '(legacy)' });
+    expect(html).toContain('data-api="/admin/api/profiles/weird%2Fid%23frag"');
+    // The raw, unencoded id must not appear as a live path segment.
+    expect(html).not.toContain('data-api="/admin/api/profiles/weird/id#frag"');
+  });
+
   it('uses slug-scoped /admin/api/:slug/profiles URLs when slug is not "(legacy)"', () => {
     const html = renderAdminPage({ config: config(), slug: 'myapp' });
     expect(html).toContain('data-api="/admin/api/myapp/profiles"');

@@ -39,7 +39,7 @@ function profileEditForm(profile: Profile, apiBase: string): Html {
   const claimsJson = JSON.stringify(profile.claims, null, 2);
   return html`<form
     class="edit"
-    data-api="${apiBase}/${profile.id}"
+    data-api="${apiBase}/${encodeURIComponent(profile.id)}"
     data-method="PUT"
     method="post"
   >
@@ -90,7 +90,11 @@ function profileRow(profile: Profile, apiBase: string): Html {
     <td>
       <div class="actions">
         <button type="button" data-edit-dialog="${profile.id}">Edit</button>
-        <form data-api="${apiBase}/${profile.id}" data-method="DELETE" method="post">
+        <form
+          data-api="${apiBase}/${encodeURIComponent(profile.id)}"
+          data-method="DELETE"
+          method="post"
+        >
           <button type="submit" class="danger">Delete</button>
         </form>
       </div>
