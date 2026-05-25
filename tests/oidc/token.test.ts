@@ -110,6 +110,65 @@ describe('POST /token (authorization_code)', () => {
     await app.close();
   });
 
+  it('rejects with invalid_request when redirect_uri is missing', async () => {
+    const { app, codes } = await buildApp();
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    const code = codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: 'my-app',
+      }).toString(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_request');
+    await app.close();
+  });
+
+  it('rejects with invalid_grant when redirect_uri does not match the code', async () => {
+    const { app, codes } = await buildApp();
+    const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+    const code = codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        code_verifier: verifier,
+        client_id: 'my-app',
+        redirect_uri: 'http://localhost:5173/other/callback',
+      }).toString(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_grant');
+    await app.close();
+  });
+
   it('rejects with invalid_grant when PKCE verifier does not match', async () => {
     const { app, codes } = await buildApp();
     const code = codes.issue({

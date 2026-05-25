@@ -116,7 +116,7 @@ async function handleCodeGrant(
   body: TokenBody,
   reply: FastifyReply,
 ): Promise<unknown> {
-  if (!body.code || !body.code_verifier || !body.client_id) {
+  if (!body.code || !body.code_verifier || !body.client_id || !body.redirect_uri) {
     return reply
       .code(400)
       .send({ error: 'invalid_request', error_description: 'missing required fields' });
@@ -141,7 +141,7 @@ async function handleCodeGrant(
       .send({ error: 'invalid_grant', error_description: 'PKCE verifier mismatch' });
   }
 
-  if (body.redirect_uri && body.redirect_uri !== record.redirectUri) {
+  if (body.redirect_uri !== record.redirectUri) {
     return reply
       .code(400)
       .send({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
