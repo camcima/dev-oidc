@@ -28,8 +28,15 @@ export interface EventsDeps {
 export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): void {
   // Track open SSE responses so server shutdown can close them. Without this,
   // app.close() blocks waiting for these long-lived keep-alive connections.
+  //
+  // This MUST run as a preClose hook, not onClose: Fastify runs preClose hooks
+  // before server.close() waits on in-flight requests, whereas onClose runs
+  // only after they finish. The open /admin/events stream *is* the in-flight
+  // request blocking shutdown, so an onClose hook would never get the chance
+  // to end it (and the default forceCloseConnections: 'idle' won't touch an
+  // active connection).
   const active = new Set<ServerResponse>();
-  app.addHook('onClose', () => {
+  app.addHook('preClose', () => {
     for (const res of [...active]) {
       if (!res.writableEnded) res.end();
     }
@@ -41,6 +48,9 @@ export function registerEventsRoute(app: FastifyInstance, deps: EventsDeps): voi
       'cache-control': 'no-cache',
       connection: 'keep-alive',
     });
+    // Flush the handshake now so the client's EventSource opens immediately
+    // rather than waiting for the first event or keepalive frame.
+    reply.raw.flushHeaders();
     active.add(reply.raw);
 
     const send = (event: AdminEvent): void => {
