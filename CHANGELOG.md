@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - **Releases fail fast without `GITHUB_TOKEN`.** With `github.release` enabled, release-it silently falls back to a no-op web release when the token is absent (publishing to npm and pushing the tag but creating no GitHub Release). A `before:init` preflight now hard-stops the release if `GITHUB_TOKEN` is unset; dry runs are unaffected.
+- **The Docker image publishes automatically on tag push.** `release-docker` now triggers on any pushed `v*` tag (in addition to the manual `workflow_dispatch`), so cutting a release no longer needs a separate manual run to ship the GHCR image. Stable tags also move `:latest`; prerelease tags (`v*-…`) publish their version only.
 
 ## [0.4.0] - 2026-05-24
 

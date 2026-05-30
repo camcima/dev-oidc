@@ -1,6 +1,9 @@
 name: release-docker
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -23,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.tag || github.ref }}
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -37,18 +40,38 @@ jobs:
       - name: Compute image tags
         id: tags
         env:
+          EVENT_NAME: ${{ github.event_name }}
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_LATEST: ${{ inputs.latest }}
+          REF_NAME: ${{ github.ref_name }}
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          VERSION="${INPUT_TAG#v}"
+          # Resolve the git tag: from the manual input on workflow_dispatch,
+          # or from the pushed ref on a tag push.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$REF_NAME"
+          fi
+          VERSION="${TAG#v}"
           REPO="ghcr.io/${REPOSITORY}"
           TAGS="${REPO}:${VERSION}"
-          if [ "$INPUT_LATEST" = "true" ]; then
+          # Decide whether to also move :latest. On a manual run, honor the
+          # input. On a tag push, move :latest unless this is a prerelease
+          # (any version containing '-', e.g. v0.1.0-alpha.1).
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            LATEST="$INPUT_LATEST"
+          elif [ "${VERSION#*-}" != "$VERSION" ]; then
+            LATEST="false"
+          else
+            LATEST="true"
+          fi
+          if [ "$LATEST" = "true" ]; then
             TAGS="${TAGS}"$'\n'"${REPO}:latest"
           fi
           {
+            echo "tag=${TAG}"
             echo "tags<<EOF"
             echo "${TAGS}"
             echo "EOF"
@@ -62,5 +85,5 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ inputs.tag }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.tag }}
             org.opencontainers.image.revision=${{ github.sha }}
