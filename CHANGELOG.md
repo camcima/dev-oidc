@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed (BREAKING)
 
 - **Config validation is stricter; previously-loading configs can now fail at startup.** `dev-oidc.config.json` (and `hub.json`) now reject several shapes that used to load silently:
-  - Duplicate `clients[].clientId` values, duplicate `profiles[].id` values, and duplicate URIs within a single client's `redirectUris`/`postLogoutRedirectUris` are rejected — previously a duplicate silently shadowed earlier entries wherever handlers looked clients/profiles up by id.
+  - Duplicate `clients[].clientId` values, duplicate `profiles[].id` values, and duplicate URIs within a single client's `redirectUris`/`postLogoutRedirectUris` are rejected — previously a duplicate silently shadowed later entries wherever handlers looked clients/profiles up by id.
   - `subjectClaim` must be a simple identifier (letters, digits, underscore; not starting with a digit) and must not be a reserved JWT/OIDC claim name other than `sub`.
   - `redirectUris`, `postLogoutRedirectUris`, `branding.logoUrl`, `profiles[].avatar`, and hub's `server.publicUrl` must be http(s) URLs with no embedded credentials and no fragment. **Custom native-app redirect schemes are no longer accepted as redirect URIs** — e.g. `com.example.app://callback` (RFC 8252-style) now fails validation; only `http://`/`https://` redirect URIs are allowed.
   - A hub config (`hub.json`) that registers the same `configPath` under two different slugs is rejected.
