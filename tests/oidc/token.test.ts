@@ -486,6 +486,99 @@ describe('POST /token (ID-token fidelity claims)', () => {
   });
 });
 
+describe('POST /token does not consume credentials on invalid exchanges', () => {
+  const verifier = 'verifier-0123456789abcdef0123456789abcdef';
+
+  function issueCode(codes: CodeStore): string {
+    return codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256(verifier),
+      nonce: 'n1',
+      redirectUri: 'http://localhost:5173/auth/callback',
+      scope: 'openid',
+    });
+  }
+
+  function exchange(
+    app: Awaited<ReturnType<typeof buildApp>>['app'],
+    params: Record<string, string>,
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/token',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams(params).toString(),
+    });
+  }
+
+  const validParams = (code: string) => ({
+    grant_type: 'authorization_code',
+    code,
+    code_verifier: verifier,
+    client_id: 'my-app',
+    redirect_uri: 'http://localhost:5173/auth/callback',
+  });
+
+  it('a wrong PKCE verifier is rejected but the code survives for a valid retry', async () => {
+    const { app, codes } = await buildApp();
+    const code = issueCode(codes);
+
+    const bad = await exchange(app, {
+      ...validParams(code),
+      code_verifier: 'wrong-verifier-wrong-verifier-wrong',
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error_description).toBe('PKCE verifier mismatch');
+
+    const good = await exchange(app, validParams(code));
+    expect(good.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('a wrong redirect_uri is rejected but the code survives', async () => {
+    const { app, codes } = await buildApp();
+    const code = issueCode(codes);
+
+    const bad = await exchange(app, {
+      ...validParams(code),
+      redirect_uri: 'http://evil.example/cb',
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error_description).toBe('redirect_uri mismatch');
+
+    const good = await exchange(app, validParams(code));
+    expect(good.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('a refresh with the wrong client_id is rejected but the refresh token survives', async () => {
+    const { app, codes } = await buildApp();
+    const refreshToken = codes.issueRefresh({
+      clientId: 'my-app',
+      profileId: 'alice',
+      scope: 'openid',
+    });
+
+    const bad = await exchange(app, {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: 'other-app',
+    });
+    // 'other-app' is unknown, so this fails at client auth; the important
+    // assertion is that the token was not burned.
+    expect(bad.statusCode).toBeGreaterThanOrEqual(400);
+
+    const good = await exchange(app, {
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: 'my-app',
+    });
+    expect(good.statusCode).toBe(200);
+    await app.close();
+  });
+});
+
 describe('POST /token (client_secret enforcement)', () => {
   function payload(extra: Record<string, string>): string {
     const verifier = 'verifier-0123456789abcdef0123456789abcdef';

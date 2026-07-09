@@ -116,36 +116,31 @@ async function handleCodeGrant(
   body: TokenBody,
   reply: FastifyReply,
 ): Promise<unknown> {
-  if (!body.code || !body.code_verifier || !body.client_id || !body.redirect_uri) {
+  const code = body.code;
+  const verifier = body.code_verifier;
+  const clientId = body.client_id;
+  const redirectUri = body.redirect_uri;
+  if (!code || !verifier || !clientId || !redirectUri) {
     return reply
       .code(400)
       .send({ error: 'invalid_request', error_description: 'missing required fields' });
   }
 
-  const record = tenant.codes.consume(body.code);
-  if (!record) {
+  const result = tenant.codes.consumeIf(code, (record) => {
+    if (record.clientId !== clientId) return 'client_id mismatch';
+    if (s256(verifier) !== record.codeChallenge) return 'PKCE verifier mismatch';
+    if (redirectUri !== record.redirectUri) return 'redirect_uri mismatch';
+    return null;
+  });
+  if (result.status === 'missing') {
     return reply
       .code(400)
       .send({ error: 'invalid_grant', error_description: 'code expired or already consumed' });
   }
-
-  if (record.clientId !== body.client_id) {
-    return reply
-      .code(400)
-      .send({ error: 'invalid_grant', error_description: 'client_id mismatch' });
+  if (result.status === 'rejected') {
+    return reply.code(400).send({ error: 'invalid_grant', error_description: result.reason });
   }
-
-  if (s256(body.code_verifier) !== record.codeChallenge) {
-    return reply
-      .code(400)
-      .send({ error: 'invalid_grant', error_description: 'PKCE verifier mismatch' });
-  }
-
-  if (body.redirect_uri !== record.redirectUri) {
-    return reply
-      .code(400)
-      .send({ error: 'invalid_grant', error_description: 'redirect_uri mismatch' });
-  }
+  const record = result.record;
 
   const config = tenant.runtime.get();
   const profile = config.profiles.find((p) => p.id === record.profileId);
@@ -171,14 +166,19 @@ async function handleRefreshGrant(
   body: TokenBody,
   reply: FastifyReply,
 ): Promise<unknown> {
-  if (!body.refresh_token || !body.client_id) {
+  const refreshToken = body.refresh_token;
+  const clientId = body.client_id;
+  if (!refreshToken || !clientId) {
     return reply.code(400).send({ error: 'invalid_request' });
   }
 
-  const record = tenant.codes.consumeRefresh(body.refresh_token);
-  if (!record || record.clientId !== body.client_id) {
+  const result = tenant.codes.consumeRefreshIf(refreshToken, (record) =>
+    record.clientId === clientId ? null : 'client_id mismatch',
+  );
+  if (result.status !== 'consumed') {
     return reply.code(400).send({ error: 'invalid_grant' });
   }
+  const record = result.record;
 
   const config = tenant.runtime.get();
   const profile = config.profiles.find((p) => p.id === record.profileId);
