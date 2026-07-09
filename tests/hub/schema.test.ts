@@ -202,3 +202,18 @@ describe('ServerSchema.tls', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('server.publicUrl validation', () => {
+  it('rejects a publicUrl with a query string or fragment', () => {
+    for (const publicUrl of ['https://oidc.test/?x=1', 'https://oidc.test/#frag']) {
+      const result = HubConfigSchema.safeParse({ server: { publicUrl } });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it('accepts a plain https publicUrl', () => {
+    expect(HubConfigSchema.safeParse({ server: { publicUrl: 'https://oidc.test' } }).success).toBe(
+      true,
+    );
+  });
+});

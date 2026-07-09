@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { writeConfigFile } from '@/config/writer.js';
 import type { Profile } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
+import { httpUrl } from '@/shared/url-schema.js';
 
 export interface ProfilesRoutesDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -13,7 +14,7 @@ const ProfileInput = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.string().email(),
-  avatar: z.string().url().nullable().optional(),
+  avatar: httpUrl().nullable().optional(),
   emailVerified: z.boolean().optional(),
   givenName: z.string().min(1).optional(),
   familyName: z.string().min(1).optional(),

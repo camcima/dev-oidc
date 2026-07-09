@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { z } from 'zod';
+import { httpUrl } from '@/shared/url-schema.js';
 
 export const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
@@ -58,7 +59,7 @@ const TlsSchema = z
 const ServerSchema = z.object({
   port: z.number().int().positive().default(8095),
   host: z.string().default('127.0.0.1'),
-  publicUrl: z.string().url().optional(),
+  publicUrl: httpUrl({ allowQuery: false }).optional(),
   tls: TlsSchema.optional(),
 });
 

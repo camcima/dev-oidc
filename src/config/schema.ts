@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { RESERVED_CLAIM_NAMES } from '@/oidc/claims.js';
+import { httpUrl } from '@/shared/url-schema.js';
 
 const SigningKeySchema = z.object({
   kid: z.string().min(1),
@@ -10,15 +11,15 @@ const SigningKeySchema = z.object({
 const ClientSchema = z.object({
   clientId: z.string().min(1),
   clientSecret: z.string().min(1).optional(),
-  redirectUris: z.array(z.string().url()).min(1),
-  postLogoutRedirectUris: z.array(z.string().url()).default([]),
+  redirectUris: z.array(httpUrl()).min(1),
+  postLogoutRedirectUris: z.array(httpUrl()).default([]),
   audience: z.string().min(1),
 });
 
 const BrandingInner = z.object({
   title: z.string().default('Dev OIDC Login'),
   accentColor: z.string().default('#1f6feb'),
-  logoUrl: z.string().url().nullable().default(null),
+  logoUrl: httpUrl().nullable().default(null),
 });
 const BrandingSchema = BrandingInner.default(BrandingInner.parse({}));
 
@@ -26,7 +27,7 @@ const ProfileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.string().email(),
-  avatar: z.string().url().nullable().default(null),
+  avatar: httpUrl().nullable().default(null),
   emailVerified: z.boolean().optional(),
   givenName: z.string().min(1).optional(),
   familyName: z.string().min(1).optional(),

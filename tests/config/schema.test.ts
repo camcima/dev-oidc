@@ -292,3 +292,26 @@ describe('ConfigSchema identity uniqueness', () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe('protocol URL validation', () => {
+  const withRedirect = (uri: string) => ({
+    signingKey: { kid: 'k1' },
+    clients: [{ clientId: 'app', redirectUris: [uri], audience: 'api' }],
+    profiles: [],
+  });
+
+  it('rejects redirect URIs with fragments or credentials', () => {
+    expect(ConfigSchema.safeParse(withRedirect('http://localhost:3000/cb#frag')).success).toBe(
+      false,
+    );
+    expect(ConfigSchema.safeParse(withRedirect('http://u:p@localhost:3000/cb')).success).toBe(
+      false,
+    );
+  });
+
+  it('keeps accepting redirect URIs with query strings', () => {
+    expect(
+      ConfigSchema.safeParse(withRedirect('http://localhost:3000/cb?provider=dev')).success,
+    ).toBe(true);
+  });
+});
