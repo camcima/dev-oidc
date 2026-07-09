@@ -100,6 +100,49 @@ export const ConfigSchema = ConfigBodySchema.passthrough().superRefine((value, c
       });
     }
   }
+
+  // Identity uniqueness: handlers select clients/profiles with Array.find,
+  // so a duplicate id silently shadows every later entry.
+  const seenClientIds = new Set<string>();
+  for (const [i, client] of value.clients.entries()) {
+    if (seenClientIds.has(client.clientId)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['clients', i, 'clientId'],
+        message: `duplicate clientId "${client.clientId}"`,
+      });
+    }
+    seenClientIds.add(client.clientId);
+
+    for (const [listName, uris] of [
+      ['redirectUris', client.redirectUris],
+      ['postLogoutRedirectUris', client.postLogoutRedirectUris],
+    ] as const) {
+      const seenUris = new Set<string>();
+      for (const [j, uri] of uris.entries()) {
+        if (seenUris.has(uri)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['clients', i, listName, j],
+            message: `duplicate ${listName} entry "${uri}"`,
+          });
+        }
+        seenUris.add(uri);
+      }
+    }
+  }
+
+  const seenProfileIds = new Set<string>();
+  for (const [i, profile] of value.profiles.entries()) {
+    if (seenProfileIds.has(profile.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['profiles', i, 'id'],
+        message: `duplicate profile id "${profile.id}"`,
+      });
+    }
+    seenProfileIds.add(profile.id);
+  }
 }) as unknown as typeof ConfigBodySchema;
 
 export type Config = z.infer<typeof ConfigBodySchema>;

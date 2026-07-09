@@ -185,3 +185,78 @@ describe('Project ConfigSchema rejects misplaced TLS', () => {
     }
   });
 });
+
+describe('ConfigSchema identity uniqueness', () => {
+  const client = (over: Record<string, unknown> = {}) => ({
+    clientId: 'app',
+    redirectUris: ['http://localhost:3000/cb'],
+    audience: 'api',
+    ...over,
+  });
+  const base = {
+    signingKey: { kid: 'k1' },
+    clients: [client()],
+    profiles: [{ id: 'alice', displayName: 'Alice', email: 'alice@example.com' }],
+  };
+
+  it('rejects duplicate clientId values', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client(), client({ redirectUris: ['http://localhost:4000/cb'] })],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate clientId "app"/.test(i.message))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects duplicate profile ids', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      profiles: [
+        { id: 'alice', displayName: 'Alice', email: 'alice@example.com' },
+        { id: 'alice', displayName: 'Alice 2', email: 'alice2@example.com' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate profile id "alice"/.test(i.message))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects duplicate entries within redirectUris', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client({ redirectUris: ['http://localhost:3000/cb', 'http://localhost:3000/cb'] })],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate entries within postLogoutRedirectUris', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [
+        client({
+          postLogoutRedirectUris: ['http://localhost:3000/', 'http://localhost:3000/'],
+        }),
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts distinct clients, profiles, and URIs', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client(), client({ clientId: 'app2' })],
+      profiles: [
+        { id: 'alice', displayName: 'Alice', email: 'alice@example.com' },
+        { id: 'bob', displayName: 'Bob', email: 'bob@example.com' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
