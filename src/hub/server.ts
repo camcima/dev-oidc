@@ -262,7 +262,11 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
 
       scope.get('/:slug/.well-known/jwks.json', async (req) => getTenant(req).jwks);
 
-      registerAuthorize(scope, { getTenant, pathPrefix: '/:slug' });
+      registerAuthorize(scope, {
+        getTenant,
+        pathPrefix: '/:slug',
+        adminPath: (slug) => `/admin/${slug}`,
+      });
       registerComplete(scope, { getTenant, pathPrefix: '/:slug' });
       registerToken(scope, { getTenant, pathPrefix: '/:slug' });
       registerLogout(scope, { getTenant, pathPrefix: '/:slug' });

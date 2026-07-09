@@ -148,4 +148,18 @@ describe('GET /authorize', () => {
     expect(rec?.scope).toBe('openid custom_scope');
     await app.close();
   });
+
+  it('login page links to the per-tenant admin path when adminPath is provided', async () => {
+    const config = buildConfig();
+    const runtime = createRuntimeConfig(config);
+    const pending = createPendingAuthStore({ ttlMs: 60_000 });
+    const app = Fastify();
+    const tenant = buildActiveTenant({ slug: 'acme', config, runtime, pending });
+    registerAuthorize(app, { getTenant: () => tenant, adminPath: (slug) => `/admin/${slug}` });
+
+    const res = await app.inject({ method: 'GET', url: `/authorize?${validParams}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain('href="/admin/acme"');
+    await app.close();
+  });
 });

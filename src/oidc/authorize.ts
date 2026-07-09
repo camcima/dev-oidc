@@ -5,6 +5,8 @@ import { renderLoginPage } from '@/login/page.js';
 export interface AuthorizeDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
   pathPrefix?: string;
+  /** Maps a tenant slug to its admin page URL. Defaults to the legacy '/admin'. */
+  adminPath?: (slug: string) => string;
 }
 
 interface AuthorizeQuery {
@@ -87,6 +89,7 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       profiles: config.profiles,
       branding: config.branding,
       actionUrl: `${concretePrefix}/authorize/complete`,
+      adminUrl: deps.adminPath ? deps.adminPath(tenant.slug) : '/admin',
     });
 
     return reply.code(200).type('text/html; charset=utf-8').send(html);
