@@ -1,6 +1,7 @@
 import path from 'node:path';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import * as jose from 'jose';
 import { z } from 'zod';
 import type { SigningKey } from '@/config/schema.js';
@@ -63,6 +64,11 @@ interface PersistedKey {
   publicJwk: jose.JWK;
 }
 
+const PUBLIC_COMPONENTS: Record<string, readonly string[]> = {
+  RSA: ['n', 'e'],
+  EC: ['crv', 'x', 'y'],
+};
+
 async function loadKeyFromFile(
   filePath: string,
   kid: string,
@@ -106,6 +112,24 @@ async function loadKeyFromFile(
     );
   }
 
+  const components = PUBLIC_COMPONENTS[parsed.privateJwk.kty];
+  if (!components || parsed.publicJwk.kty !== parsed.privateJwk.kty) {
+    throw new Error(
+      `dev-oidc: signing key at ${filePath} has inconsistent key types ` +
+        `(private "${parsed.privateJwk.kty}", public "${parsed.publicJwk.kty}"). Delete the file to regenerate.`,
+    );
+  }
+  for (const field of components) {
+    const pub = (parsed.publicJwk as unknown as Record<string, unknown>)[field];
+    const priv = (parsed.privateJwk as unknown as Record<string, unknown>)[field];
+    if (pub !== priv) {
+      throw new Error(
+        `dev-oidc: signing key at ${filePath} has a publicJwk that does not match its privateJwk ` +
+          `(component "${field}" differs). JWKS would not verify issued tokens. Delete the file to regenerate.`,
+      );
+    }
+  }
+
   const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.KeyLike;
   const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
   return { kid, alg: configAlg, privateKey, publicJwk };
@@ -119,8 +143,15 @@ async function saveKeyToFile(filePath: string, material: KeyMaterial): Promise<v
     publicJwk: material.publicJwk,
   };
   await mkdir(dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(payload, null, 2) + '\n', {
-    encoding: 'utf8',
-    mode: 0o600,
-  });
+  const tmpPath = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await writeFile(tmpPath, JSON.stringify(payload, null, 2) + '\n', {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
+    await rename(tmpPath, filePath);
+  } catch (error) {
+    await rm(tmpPath, { force: true });
+    throw error;
+  }
 }
