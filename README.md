@@ -283,7 +283,9 @@ Every field in `dev-oidc.config.json`:
       "clientId": "my-app", // What your app sends as `client_id`.
       "clientSecret": "s3cr3t", // Optional. Omit for public clients (no secret required).
       "redirectUris": [
-        // Exact-match allowlist.
+        // Exact-match allowlist. Must be http(s) URLs — no custom app
+        // schemes (e.g. "com.example.app://callback"), fragments, or
+        // embedded credentials.
         "http://localhost:5173/auth/callback",
       ],
       "postLogoutRedirectUris": [

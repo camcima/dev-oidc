@@ -6,8 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## Unreleased
 
+### Added
+
+- **Opt-in per-client `allowedScopes`.** Set `clients[].allowedScopes` on a client to restrict which scopes it may request; `/authorize` requests containing a scope outside the allowlist are rejected with `400 invalid_scope` (`openid` is always implicitly allowed). Clients that omit the field keep the existing passthrough behavior — any requested scope is signed into the token unchanged.
+- **`branding.logoUrl` is rendered on the login page.** The field was already accepted by config but previously had no effect on the rendered page.
+- **Hub login pages link to the tenant's own admin page.** The "Manage profiles →" link on a tenant's `/authorize` page now points at `/admin/<slug>` instead of the shared hub dashboard.
+
+### Changed (BREAKING)
+
+- **Config validation is stricter; previously-loading configs can now fail at startup.** `dev-oidc.config.json` (and `hub.json`) now reject several shapes that used to load silently:
+  - Duplicate `clients[].clientId` values, duplicate `profiles[].id` values, and duplicate URIs within a single client's `redirectUris`/`postLogoutRedirectUris` are rejected — previously a duplicate silently shadowed earlier entries wherever handlers looked clients/profiles up by id.
+  - `subjectClaim` must be a simple identifier (letters, digits, underscore; not starting with a digit) and must not be a reserved JWT/OIDC claim name other than `sub`.
+  - `redirectUris`, `postLogoutRedirectUris`, `branding.logoUrl`, `profiles[].avatar`, and hub's `server.publicUrl` must be http(s) URLs with no embedded credentials and no fragment. **Custom native-app redirect schemes are no longer accepted as redirect URIs** — e.g. `com.example.app://callback` (RFC 8252-style) now fails validation; only `http://`/`https://` redirect URIs are allowed.
+  - A hub config (`hub.json`) that registers the same `configPath` under two different slugs is rejected.
+  - **Migration:** dedupe any repeated client/profile ids or redirect URIs, fix any `subjectClaim` that collides with a reserved claim, replace native-app redirect URIs with an `http(s)` loopback/callback URL, and give each hub tenant its own config file.
+
 ### Fixed
 
+- **Invalid token exchanges no longer consume the authorization code or refresh token.** A `/token` request with a mismatched `client_id`, PKCE verifier, or `redirect_uri` previously still removed the authorization code (or, on refresh, the refresh token) from the store before validating the binding, burning it for the legitimate client's retry. Bindings are now checked before the entry is consumed.
+- **Concurrent admin profile edits no longer lose updates.** Two overlapping admin CRUD requests against the same config file could both read the same pre-edit snapshot and race past each other on write, silently dropping one edit; all writers also shared a single fixed temp filename. Writes are now serialized per config path, and each writer gets a unique temp file.
+- **The legacy landing page reflects hot-reloaded branding.** `GET /` rendered the `branding` captured at startup, so edits made via file watch or the admin API were invisible on the landing page until restart. It now reads the live runtime config.
+- **Persisted signing-key files are written atomically, and their `publicJwk` is verified against `privateJwk` on load.** Key files now go through a unique temp file + rename instead of a direct write, so a crash mid-write can't leave a truncated file. On load, dev-oidc also confirms the public key's components (`n`/`e` for RSA, `crv`/`x`/`y` for EC) match the private key, catching a corrupted or hand-edited public half before JWKS serves a key that can't verify issued tokens.
+- **README Docker snippets pin the released `0.4.1` image** (previously referenced `0.4.0`).
 - **`/token` requires `redirect_uri` on the authorization-code grant.** Per RFC 6749 §4.1.3 the value sent at `/authorize` must be repeated at `/token`; the handler previously only compared it when supplied, so an exchange omitting it still issued tokens. It is now required (`invalid_request`) and compared unconditionally (`invalid_grant`), matching real OIDC providers and surfacing relying-party bugs.
 - **Auth-state stores are bounded.** Authorization codes, refresh tokens, and pending-login records lived in unbounded maps that only shed entries on consume, so expired-but-never-presented entries leaked for the life of a hub. Each insert now sweeps expired entries and enforces a max-entry cap (oldest evicted).
 - **Active `/admin/events` SSE streams no longer block shutdown.** Open Server-Sent-Events responses were never closed on shutdown, so `app.close()` (SIGINT/SIGTERM) hung while an admin page was open. They are now ended via a `preClose` hook (which runs _before_ Fastify waits on in-flight requests — an `onClose` hook is too late, since the open stream is the request being waited on). The handshake headers are also flushed immediately so the client connects right away.
