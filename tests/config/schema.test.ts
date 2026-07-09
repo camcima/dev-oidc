@@ -315,3 +315,21 @@ describe('protocol URL validation', () => {
     ).toBe(true);
   });
 });
+
+describe('client allowedScopes', () => {
+  it('accepts an optional allowedScopes list on a client', () => {
+    const result = ConfigSchema.safeParse({
+      signingKey: { kid: 'k1' },
+      clients: [
+        {
+          clientId: 'app',
+          redirectUris: ['http://localhost:3000/cb'],
+          audience: 'api',
+          allowedScopes: ['profile', 'email'],
+        },
+      ],
+      profiles: [],
+    });
+    expect(result.success).toBe(true);
+  });
+});

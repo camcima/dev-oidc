@@ -71,6 +71,17 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       });
     }
 
+    if (client.allowedScopes) {
+      const allowed = new Set(['openid', ...client.allowedScopes]);
+      const denied = scopeTokens.filter((s) => !allowed.has(s));
+      if (denied.length > 0) {
+        return reply.code(400).send({
+          error: 'invalid_scope',
+          error_description: `scope not allowed for this client: ${denied.join(' ')}`,
+        });
+      }
+    }
+
     const pendingAuthId = tenant.pending.create({
       clientId: client.clientId,
       redirectUri: query.redirect_uri,

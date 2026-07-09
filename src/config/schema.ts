@@ -14,6 +14,9 @@ const ClientSchema = z.object({
   redirectUris: z.array(httpUrl()).min(1),
   postLogoutRedirectUris: z.array(httpUrl()).default([]),
   audience: z.string().min(1),
+  // Opt-in scope policy. Absent = passthrough (the default; scopes are test
+  // data, not authorization grants). 'openid' is always implicitly allowed.
+  allowedScopes: z.array(z.string().min(1)).optional(),
 });
 
 const BrandingInner = z.object({

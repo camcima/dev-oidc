@@ -291,6 +291,7 @@ Every field in `dev-oidc.config.json`:
         "http://localhost:5173/",
       ],
       "audience": "my-api", // Required. Populates the JWT `aud` claim.
+      "allowedScopes": ["profile", "email"], // Optional. Opt-in scope allowlist — see "Scope propagation" below.
     },
   ],
   "subjectClaim": "sub", // Default "sub". Use "oid" for Azure AD / Entra compat.
@@ -401,6 +402,13 @@ The `scope` parameter is propagated end-to-end:
 - `/authorize` rejects requests whose `scope` does not include `openid` with `400 invalid_scope`.
 - The `/token` response `scope` field reflects the scope the client actually requested, not a hardcoded string.
 - Access tokens carry a `scope` claim with the same value.
+
+> **Scopes are test data, not authorization grants.** dev-oidc signs whatever
+> scopes the client requests into the access token so you can exercise any
+> scope your real IdP would issue. A resource server must never treat a
+> dev-oidc scope as a granted permission. To simulate an IdP that enforces a
+> scope policy, set `allowedScopes` on the client: requests containing any
+> other scope are rejected with `invalid_scope` (`openid` is always allowed).
 
 ### Refresh token rotation
 

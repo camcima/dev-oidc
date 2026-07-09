@@ -163,3 +163,69 @@ describe('GET /authorize', () => {
     await app.close();
   });
 });
+
+describe('allowedScopes policy', () => {
+  function buildScopedConfig(): Config {
+    const config = buildConfig();
+    return {
+      ...config,
+      clients: [
+        {
+          clientId: 'scoped-app',
+          redirectUris: ['http://localhost:5173/auth/callback'],
+          postLogoutRedirectUris: [],
+          audience: 'my-api',
+          allowedScopes: ['profile'],
+        },
+        {
+          clientId: 'my-app',
+          redirectUris: ['http://localhost:5173/auth/callback'],
+          postLogoutRedirectUris: [],
+          audience: 'my-api',
+        },
+      ],
+    };
+  }
+
+  async function buildScopedApp() {
+    const config = buildScopedConfig();
+    const runtime = createRuntimeConfig(config);
+    const pending = createPendingAuthStore({ ttlMs: 60_000 });
+    const app = Fastify();
+    const tenant = buildActiveTenant({ config, runtime, pending });
+    registerAuthorize(app, { getTenant: () => tenant });
+    return { app, runtime, pending };
+  }
+
+  it('rejects scopes outside the allowlist with invalid_scope', async () => {
+    const { app } = await buildScopedApp();
+    const params = new URLSearchParams(validParams);
+    params.set('client_id', 'scoped-app');
+    params.set('scope', 'openid profile admin');
+    const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_scope');
+    expect(res.json().error_description).toContain('admin');
+    await app.close();
+  });
+
+  it('accepts scopes inside the allowlist (openid always implied)', async () => {
+    const { app } = await buildScopedApp();
+    const params = new URLSearchParams(validParams);
+    params.set('client_id', 'scoped-app');
+    params.set('scope', 'openid profile');
+    const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('keeps full passthrough when allowedScopes is absent', async () => {
+    const { app } = await buildScopedApp();
+    const params = new URLSearchParams(validParams);
+    params.set('client_id', 'my-app');
+    params.set('scope', 'openid whatever_custom');
+    const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+});
