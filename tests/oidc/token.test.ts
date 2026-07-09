@@ -553,7 +553,22 @@ describe('POST /token does not consume credentials on invalid exchanges', () => 
   });
 
   it('a refresh with the wrong client_id is rejected but the refresh token survives', async () => {
-    const { app, codes } = await buildApp();
+    const { app, codes, runtime } = await buildApp();
+    // Register a second client so the bad attempt passes client authentication
+    // and reaches the consumeRefreshIf binding check.
+    const config = runtime.get();
+    runtime.set({
+      ...config,
+      clients: [
+        ...config.clients,
+        {
+          clientId: 'other-app',
+          redirectUris: ['http://localhost:9999/cb'],
+          postLogoutRedirectUris: [],
+          audience: 'other-api',
+        },
+      ],
+    });
     const refreshToken = codes.issueRefresh({
       clientId: 'my-app',
       profileId: 'alice',
@@ -565,9 +580,8 @@ describe('POST /token does not consume credentials on invalid exchanges', () => 
       refresh_token: refreshToken,
       client_id: 'other-app',
     });
-    // 'other-app' is unknown, so this fails at client auth; the important
-    // assertion is that the token was not burned.
-    expect(bad.statusCode).toBeGreaterThanOrEqual(400);
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json()).toEqual({ error: 'invalid_grant' });
 
     const good = await exchange(app, {
       grant_type: 'refresh_token',
