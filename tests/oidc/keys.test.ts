@@ -213,6 +213,25 @@ describe('key file integrity', () => {
     );
   });
 
+  it('rejects a key file whose JWKs are missing the public components entirely', async () => {
+    const dir = makeTmpDir('dev-oidc-keys-missing-');
+    const filePath = path.join(dir, 'key.json');
+
+    // kty-only JWKs pass PersistedKeySchema but carry no public components;
+    // this must trip the correspondence check, not a generic import error.
+    writeFileSync(
+      filePath,
+      JSON.stringify({ kid: 'k1', privateJwk: { kty: 'RSA' }, publicJwk: { kty: 'RSA' } }),
+    );
+
+    await expect(
+      createKeyMaterial(
+        { kid: 'k1', alg: 'RS256', source: `file:${filePath}` },
+        { configDir: dir },
+      ),
+    ).rejects.toThrow(/publicJwk.*does not match/i);
+  });
+
   it('leaves no temp files behind after saving', async () => {
     const dir = makeTmpDir('dev-oidc-keys-tmp-');
     const filePath = path.join(dir, 'key.json');

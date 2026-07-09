@@ -122,10 +122,10 @@ async function loadKeyFromFile(
   for (const field of components) {
     const pub = (parsed.publicJwk as unknown as Record<string, unknown>)[field];
     const priv = (parsed.privateJwk as unknown as Record<string, unknown>)[field];
-    if (pub !== priv) {
+    if (pub === undefined || priv === undefined || pub !== priv) {
       throw new Error(
         `dev-oidc: signing key at ${filePath} has a publicJwk that does not match its privateJwk ` +
-          `(component "${field}" differs). JWKS would not verify issued tokens. Delete the file to regenerate.`,
+          `(component "${field}" is missing or differs). JWKS would not verify issued tokens. Delete the file to regenerate.`,
       );
     }
   }
