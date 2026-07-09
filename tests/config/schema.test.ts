@@ -124,6 +124,38 @@ describe('ConfigSchema', () => {
   });
 });
 
+describe('subjectClaim constraints', () => {
+  const withSubjectClaim = (subjectClaim: string) => ({
+    signingKey: { kid: 'k1' },
+    clients: [{ clientId: 'app', redirectUris: ['http://localhost:3000/cb'], audience: 'api' }],
+    profiles: [],
+    subjectClaim,
+  });
+
+  it('accepts "sub", "oid", and snake_case identifiers', () => {
+    for (const name of ['sub', 'oid', 'user_id']) {
+      expect(ConfigSchema.safeParse(withSubjectClaim(name)).success).toBe(true);
+    }
+  });
+
+  it('rejects the empty string', () => {
+    expect(ConfigSchema.safeParse(withSubjectClaim('')).success).toBe(false);
+  });
+
+  it('rejects reserved claim names other than "sub"', () => {
+    for (const name of ['scope', 'iss', 'aud', 'exp', 'email', 'name']) {
+      const result = ConfigSchema.safeParse(withSubjectClaim(name));
+      expect(result.success, `subjectClaim "${name}" should be rejected`).toBe(false);
+    }
+  });
+
+  it('rejects non-identifier strings', () => {
+    for (const name of ['9lives', 'has space', 'dash-claim', 'dot.claim']) {
+      expect(ConfigSchema.safeParse(withSubjectClaim(name)).success).toBe(false);
+    }
+  });
+});
+
 function baseConfig(profileExtra: Record<string, unknown>) {
   return {
     signingKey: { kid: 'k1' },

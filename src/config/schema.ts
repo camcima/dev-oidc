@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RESERVED_CLAIM_NAMES } from '@/oidc/claims.js';
 
 const SigningKeySchema = z.object({
   kid: z.string().min(1),
@@ -37,7 +38,16 @@ const ProfileSchema = z.object({
 const ConfigBodySchema = z.object({
   signingKey: SigningKeySchema,
   clients: z.array(ClientSchema).min(1),
-  subjectClaim: z.string().default('sub'),
+  subjectClaim: z
+    .string()
+    .regex(
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+      'subjectClaim must be a simple identifier (letters, digits, underscore; not starting with a digit)',
+    )
+    .refine((v) => v === 'sub' || !RESERVED_CLAIM_NAMES.includes(v), {
+      message: 'subjectClaim must not be a reserved JWT/OIDC claim name (only "sub" is allowed)',
+    })
+    .default('sub'),
   tokenTtlSeconds: z.number().int().positive().default(900),
   refreshTokenTtlSeconds: z.number().int().positive().default(28800),
   branding: BrandingSchema,
