@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { withConfigLock } from '@/config/mutex.js';
 import { writeConfigFile } from '@/config/writer.js';
 import type { Profile } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
@@ -58,16 +59,18 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
       return reply.code(400).send({ error: 'invalid_input', details: parsed.error.message });
     }
     const profile = toProfile(parsed.data);
-    const current = tenant.runtime.get();
-    if (current.profiles.some((p) => p.id === profile.id)) {
-      return reply
-        .code(409)
-        .send({ error: 'conflict', error_description: 'profile id already exists' });
-    }
-    const next = { ...current, profiles: [...current.profiles, profile] };
-    await writeConfigFile(tenant.configPath, next);
-    tenant.runtime.set(next);
-    return reply.code(201).send(profile);
+    return withConfigLock(tenant.configPath, async () => {
+      const current = tenant.runtime.get();
+      if (current.profiles.some((p) => p.id === profile.id)) {
+        return reply
+          .code(409)
+          .send({ error: 'conflict', error_description: 'profile id already exists' });
+      }
+      const next = { ...current, profiles: [...current.profiles, profile] };
+      await writeConfigFile(tenant.configPath, next);
+      tenant.runtime.set(next);
+      return reply.code(201).send(profile);
+    });
   });
 
   app.put(
@@ -79,29 +82,31 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
         return reply.code(400).send({ error: 'invalid_input', details: parsed.error.message });
       }
       const profile = toProfile(parsed.data);
-      const current = tenant.runtime.get();
-      const idx = current.profiles.findIndex((p) => p.id === request.params.id);
-      if (idx < 0) {
-        return reply.code(404).send({ error: 'not_found' });
-      }
-      // A body.id that differs from the URL :id is a rename. Allow it only
-      // when the new id doesn't already belong to another profile —
-      // otherwise the write would produce two profiles with identical ids
-      // and break the POST handler's uniqueness invariant.
-      if (profile.id !== request.params.id) {
-        const collides = current.profiles.some((p, i) => i !== idx && p.id === profile.id);
-        if (collides) {
-          return reply
-            .code(409)
-            .send({ error: 'conflict', error_description: 'profile id already exists' });
+      return withConfigLock(tenant.configPath, async () => {
+        const current = tenant.runtime.get();
+        const idx = current.profiles.findIndex((p) => p.id === request.params.id);
+        if (idx < 0) {
+          return reply.code(404).send({ error: 'not_found' });
         }
-      }
-      const nextProfiles = [...current.profiles];
-      nextProfiles[idx] = profile;
-      const next = { ...current, profiles: nextProfiles };
-      await writeConfigFile(tenant.configPath, next);
-      tenant.runtime.set(next);
-      return reply.code(200).send(profile);
+        // A body.id that differs from the URL :id is a rename. Allow it only
+        // when the new id doesn't already belong to another profile —
+        // otherwise the write would produce two profiles with identical ids
+        // and break the POST handler's uniqueness invariant.
+        if (profile.id !== request.params.id) {
+          const collides = current.profiles.some((p, i) => i !== idx && p.id === profile.id);
+          if (collides) {
+            return reply
+              .code(409)
+              .send({ error: 'conflict', error_description: 'profile id already exists' });
+          }
+        }
+        const nextProfiles = [...current.profiles];
+        nextProfiles[idx] = profile;
+        const next = { ...current, profiles: nextProfiles };
+        await writeConfigFile(tenant.configPath, next);
+        tenant.runtime.set(next);
+        return reply.code(200).send(profile);
+      });
     },
   );
 
@@ -109,18 +114,20 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
     `${prefix}/profiles/:id`,
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenant = deps.getTenant(request);
-      const current = tenant.runtime.get();
-      const idx = current.profiles.findIndex((p) => p.id === request.params.id);
-      if (idx < 0) {
-        return reply.code(404).send({ error: 'not_found' });
-      }
-      const next = {
-        ...current,
-        profiles: current.profiles.filter((p) => p.id !== request.params.id),
-      };
-      await writeConfigFile(tenant.configPath, next);
-      tenant.runtime.set(next);
-      return reply.code(204).send();
+      return withConfigLock(tenant.configPath, async () => {
+        const current = tenant.runtime.get();
+        const idx = current.profiles.findIndex((p) => p.id === request.params.id);
+        if (idx < 0) {
+          return reply.code(404).send({ error: 'not_found' });
+        }
+        const next = {
+          ...current,
+          profiles: current.profiles.filter((p) => p.id !== request.params.id),
+        };
+        await writeConfigFile(tenant.configPath, next);
+        tenant.runtime.set(next);
+        return reply.code(204).send();
+      });
     },
   );
 }

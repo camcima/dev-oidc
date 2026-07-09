@@ -73,6 +73,7 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
   }
 
   let conflictPath: string | null = null;
+  let conflictSlug: string | null = null;
   try {
     await mutateHubConfig(options.hubConfigPath, (hub) => {
       const existing = hub.tenants.find((t) => t.slug === slug);
@@ -80,6 +81,11 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
         conflictPath = existing.configPath;
         // Throw a sentinel to abort the mutation; we surface the message below.
         throw new Error('__slug_conflict__');
+      }
+      const pathOwner = hub.tenants.find((t) => t.configPath === absConfig);
+      if (pathOwner) {
+        conflictSlug = pathOwner.slug;
+        throw new Error('__configpath_conflict__');
       }
       return {
         ...hub,
@@ -91,6 +97,12 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
       return {
         exitCode: 1,
         stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
+      };
+    }
+    if (err instanceof Error && err.message === '__configpath_conflict__' && conflictSlug) {
+      return {
+        exitCode: 1,
+        stderr: `dev-oidc: config ${absConfig} is already registered to slug "${conflictSlug}"; unregister it first or use a separate config file\n`,
       };
     }
     // Lockfile timeouts, fs permission errors, malformed hub.json on read, etc.

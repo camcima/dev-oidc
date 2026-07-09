@@ -110,6 +110,19 @@ describe('HubConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects two tenants pointing at the same configPath', () => {
+    const result = HubConfigSchema.safeParse({
+      tenants: [
+        { slug: 'app-a', configPath: '/abs/shared.json' },
+        { slug: 'app-b', configPath: '/abs/shared.json' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate configPath/.test(i.message))).toBe(true);
+    }
+  });
+
   it('exports isReservedSlug', () => {
     expect(isReservedSlug('admin')).toBe(true);
     expect(isReservedSlug('my-app')).toBe(false);

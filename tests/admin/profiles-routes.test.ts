@@ -250,3 +250,25 @@ describe('admin profiles routes', () => {
     await app.close();
   });
 });
+
+describe('concurrent profile mutations', () => {
+  it('applies both of two concurrent POSTs (no lost update)', async () => {
+    const { app, runtime } = await buildApp();
+    const post = (id: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/admin/api/profiles',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ id, displayName: id, email: `${id}@example.com` }),
+      });
+
+    const [r1, r2] = await Promise.all([post('carol'), post('dave')]);
+    expect(r1.statusCode).toBe(201);
+    expect(r2.statusCode).toBe(201);
+
+    const ids = runtime.get().profiles.map((p) => p.id);
+    expect(ids).toContain('carol');
+    expect(ids).toContain('dave');
+    await app.close();
+  });
+});

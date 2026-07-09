@@ -81,6 +81,20 @@ export const HubConfigSchema = z
       }
       seen.add(t.slug);
     }
+
+    const seenPaths = new Map<string, string>();
+    for (const [i, t] of value.tenants.entries()) {
+      const owner = seenPaths.get(t.configPath);
+      if (owner !== undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tenants', i, 'configPath'],
+          message: `duplicate configPath "${t.configPath}" (already used by slug "${owner}")`,
+        });
+      } else {
+        seenPaths.set(t.configPath, t.slug);
+      }
+    }
   });
 
 export type HubConfig = z.infer<typeof HubConfigSchema>;
