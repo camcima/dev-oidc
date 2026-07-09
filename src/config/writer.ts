@@ -10,7 +10,7 @@ export async function writeConfigFile(filePath: string, config: Config): Promise
     await writeFile(tmpPath, body, { encoding: 'utf8', mode: 0o600 });
     await rename(tmpPath, filePath);
   } catch (error) {
-    await rm(tmpPath, { force: true });
+    await rm(tmpPath, { force: true }).catch(() => {});
     throw error;
   }
 }

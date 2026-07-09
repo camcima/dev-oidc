@@ -112,11 +112,19 @@ async function loadKeyFromFile(
     );
   }
 
-  const components = PUBLIC_COMPONENTS[parsed.privateJwk.kty];
-  if (!components || parsed.publicJwk.kty !== parsed.privateJwk.kty) {
+  const privateKty = parsed.privateJwk.kty;
+  const publicKty = parsed.publicJwk.kty;
+  const components = PUBLIC_COMPONENTS[privateKty];
+  if (!components) {
+    throw new Error(
+      `dev-oidc: signing key at ${filePath} has unsupported key type "${privateKty}" ` +
+        `(only "RSA" and "EC" are supported). Delete the file to regenerate.`,
+    );
+  }
+  if (publicKty !== privateKty) {
     throw new Error(
       `dev-oidc: signing key at ${filePath} has inconsistent key types ` +
-        `(private "${parsed.privateJwk.kty}", public "${parsed.publicJwk.kty}"). Delete the file to regenerate.`,
+        `(private "${privateKty}", public "${publicKty}"). Delete the file to regenerate.`,
     );
   }
   for (const field of components) {
@@ -151,7 +159,7 @@ async function saveKeyToFile(filePath: string, material: KeyMaterial): Promise<v
     });
     await rename(tmpPath, filePath);
   } catch (error) {
-    await rm(tmpPath, { force: true });
+    await rm(tmpPath, { force: true }).catch(() => {});
     throw error;
   }
 }

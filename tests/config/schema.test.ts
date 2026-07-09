@@ -318,7 +318,7 @@ describe('protocol URL validation', () => {
 
 describe('client allowedScopes', () => {
   it('accepts an optional allowedScopes list on a client', () => {
-    const result = ConfigSchema.safeParse({
+    const parsed = ConfigSchema.parse({
       signingKey: { kid: 'k1' },
       clients: [
         {
@@ -330,6 +330,6 @@ describe('client allowedScopes', () => {
       ],
       profiles: [],
     });
-    expect(result.success).toBe(true);
+    expect(parsed.clients[0]!.allowedScopes).toEqual(['profile', 'email']);
   });
 });
