@@ -134,7 +134,7 @@ Compose snippet (Linux/WSL):
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.4.0
+    image: ghcr.io/camcima/dev-oidc:0.4.1
     ports:
       - '8095:8095'
     volumes:
@@ -159,7 +159,7 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:0.4.0
+  ghcr.io/camcima/dev-oidc:0.4.1
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -175,7 +175,7 @@ The image listens on port `8095` inside the container. If you map it to a differ
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.4.0
+    image: ghcr.io/camcima/dev-oidc:0.4.1
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
@@ -476,6 +476,16 @@ Caveat: Google access tokens are opaque; dev-oidc's are signed JWTs (more useful
 - **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
 - **No authentication on `/admin`.**
 - **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
+
+### What a refresh re-reads
+
+Refreshing a token re-resolves the profile from the **current** config: the
+profile's identity fields, custom `claims`, `subjectClaim`, and token TTLs are
+all read live, so editing a profile changes the claims of already-authorized
+sessions on their next refresh (deleting the profile invalidates them). The
+**scope** is the exception: it was fixed at the original `/authorize` request
+and is carried through refreshes unchanged. This is deliberate test-double
+behavior, not how a production IdP treats an existing grant.
 
 ---
 
