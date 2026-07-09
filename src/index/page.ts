@@ -24,14 +24,15 @@ export interface RenderIndexPageInput {
 
 export function renderIndexPage(input: RenderIndexPageInput): string {
   const { tenant, adminEnabled } = input;
+  const branding = tenant.runtime.get().branding;
   const adminLink = adminEnabled ? html`<li><a href="/admin">Admin UI</a></li>` : '';
 
   const doc = html`<!doctype html>
-    <html lang="en" style="--accent: ${tenant.config.branding.accentColor}">
+    <html lang="en" style="--accent: ${branding.accentColor}">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${tenant.config.branding.title}</title>
+        <title>${branding.title}</title>
         <style>
           ${new Html(STYLES)}
         </style>

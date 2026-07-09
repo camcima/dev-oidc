@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { renderIndexPage } from '@/index/page.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Config } from '@/config/schema.js';
+import type { RuntimeConfig } from '@/config/runtime.js';
+import { createRuntimeConfig } from '@/config/runtime.js';
 
 function config(): Config {
   return {
@@ -17,19 +19,42 @@ function config(): Config {
 
 function tenant(issuer = 'http://localhost:8095'): ActiveTenantState {
   const cfg = config();
+  const runtime = createRuntimeConfig(cfg);
   return {
     slug: '(legacy)',
     configPath: '',
     status: 'active',
     config: cfg,
     issuer,
-    runtime: null as never,
+    runtime,
     keyMaterial: null as never,
     jwks: null as never,
     codes: null as never,
     pending: null as never,
     watcher: null,
   };
+}
+
+function buildTenant(issuer = 'http://localhost:8095'): {
+  tenant: ActiveTenantState;
+  runtime: RuntimeConfig;
+} {
+  const cfg = config();
+  const runtime = createRuntimeConfig(cfg);
+  const tenantObj = {
+    slug: '(legacy)',
+    configPath: '',
+    status: 'active' as const,
+    config: cfg,
+    issuer,
+    runtime,
+    keyMaterial: null as never,
+    jwks: null as never,
+    codes: null as never,
+    pending: null as never,
+    watcher: null,
+  };
+  return { tenant: tenantObj, runtime };
 }
 
 describe('renderIndexPage', () => {
@@ -64,5 +89,17 @@ describe('renderIndexPage', () => {
     });
     expect(html).not.toContain('<evil>');
     expect(html).toContain('&lt;evil&gt;');
+  });
+
+  it('renders branding from the runtime config, not the initial snapshot', () => {
+    const { tenant: t, runtime } = buildTenant();
+    runtime.set({
+      ...runtime.get(),
+      branding: { title: 'Reloaded Title', accentColor: '#ff0000', logoUrl: null },
+    });
+
+    const html = renderIndexPage({ tenant: t, adminEnabled: false });
+    expect(html).toContain('Reloaded Title');
+    expect(html).toContain('#ff0000');
   });
 });
