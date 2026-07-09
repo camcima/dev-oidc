@@ -473,19 +473,23 @@ Caveat: Google access tokens are opaque; dev-oidc's are signed JWTs (more useful
 - **Single tenant per Docker container.** The Docker image runs in legacy single-tenant mode. Use Hub mode (CLI) for multi-tenant local development.
 - **In-memory session state.** Authorization codes (60 s TTL) and refresh tokens (8 h default) are held in memory. A server restart invalidates all active codes and refresh tokens. Persistent session storage is intentionally out of scope. Signing keys can be persisted across restarts via `signingKey.source: "file:<path>"` (see [Signing-key persistence](#signing-key-persistence)).
 - **Partial config hot-reload.** Edits to `clients`, `profiles`, `branding`, `subjectClaim`, and `tokenTtlSeconds` apply on the next request after the file watcher fires. Edits to `signingKey` (kid/alg/source) and `refreshTokenTtlSeconds` require a process restart — or, in Hub mode, `dev-oidc unregister <slug> && dev-oidc register <path>` — because they're baked into the per-tenant key material and refresh-token store at activation time. Live-rotating a signing key would invalidate every JWT minted before the rotation; that's not a hot-reload behavior we want.
-- **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
-- **No authentication on `/admin`.**
-- **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
 
 ### What a refresh re-reads
 
 Refreshing a token re-resolves the profile from the **current** config: the
-profile's identity fields, custom `claims`, `subjectClaim`, and token TTLs are
-all read live, so editing a profile changes the claims of already-authorized
-sessions on their next refresh (deleting the profile invalidates them). The
-**scope** is the exception: it was fixed at the original `/authorize` request
-and is carried through refreshes unchanged. This is deliberate test-double
-behavior, not how a production IdP treats an existing grant.
+profile's identity fields, custom `claims`, `subjectClaim`, and the access/ID-token
+TTL (`tokenTtlSeconds`) are all read live, so editing a profile changes the claims
+of already-authorized sessions on their next refresh (deleting the profile
+invalidates them). The refresh token's own lifetime (`refreshTokenTtlSeconds`) is
+not re-read — it stays fixed at whatever was active when the tenant started (see
+the hot-reload limitation above). The **scope** is likewise fixed: it was set at
+the original `/authorize` request and is carried through refreshes unchanged. This
+is deliberate test-double behavior, not how a production IdP treats an existing
+grant.
+
+- **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
+- **No authentication on `/admin`.**
+- **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
 
 ---
 
