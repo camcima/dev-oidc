@@ -7,10 +7,15 @@ export interface RenderLoginPageInput {
   profiles: readonly Profile[];
   branding: Branding;
   actionUrl: string;
+  adminUrl: string;
 }
 
 export function renderLoginPage(input: RenderLoginPageInput): string {
-  const { pendingAuthId, profiles, branding, actionUrl } = input;
+  const { pendingAuthId, profiles, branding, actionUrl, adminUrl } = input;
+
+  const logo = branding.logoUrl
+    ? html`<img class="logo" src="${branding.logoUrl}" alt="${branding.title} logo" />`
+    : '';
 
   // prettier-ignore
   const tiles = profiles.map(
@@ -35,9 +40,10 @@ export function renderLoginPage(input: RenderLoginPageInput): string {
         </style>
       </head>
       <body>
+        ${logo}
         <h1>${branding.title}</h1>
         <div class="grid">${tiles}</div>
-        <a class="admin-link" href="/admin">Manage profiles →</a>
+        <a class="admin-link" href="${adminUrl}">Manage profiles →</a>
       </body>
     </html>`;
 

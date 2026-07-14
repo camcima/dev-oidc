@@ -153,6 +153,50 @@ describe('CodeStore expiry sweep and size cap', () => {
   });
 });
 
+describe('consumeIf', () => {
+  it('leaves the record stored when the check rejects, then allows a valid consume', () => {
+    const store = createCodeStore({ ttlMs: 60_000 });
+    const code = store.issue({
+      clientId: 'app',
+      profileId: 'alice',
+      codeChallenge: 'c',
+      nonce: '',
+      redirectUri: 'http://localhost:3000/cb',
+      scope: 'openid',
+    });
+
+    const rejected = store.consumeIf(code, () => 'client_id mismatch');
+    expect(rejected).toEqual({ status: 'rejected', reason: 'client_id mismatch' });
+
+    const consumed = store.consumeIf(code, () => null);
+    expect(consumed.status).toBe('consumed');
+
+    expect(store.consumeIf(code, () => null)).toEqual({ status: 'missing' });
+  });
+
+  it('reports missing for unknown and expired codes', () => {
+    const store = createCodeStore({ ttlMs: -1 });
+    const code = store.issue({
+      clientId: 'app',
+      profileId: 'alice',
+      codeChallenge: 'c',
+      nonce: '',
+      redirectUri: 'http://localhost:3000/cb',
+      scope: 'openid',
+    });
+    expect(store.consumeIf('nope', () => null)).toEqual({ status: 'missing' });
+    expect(store.consumeIf(code, () => null)).toEqual({ status: 'missing' });
+  });
+
+  it('consumeRefreshIf mirrors the same semantics', () => {
+    const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
+    const token = store.issueRefresh({ clientId: 'app', profileId: 'alice', scope: 'openid' });
+    expect(store.consumeRefreshIf(token, () => 'client_id mismatch').status).toBe('rejected');
+    expect(store.consumeRefreshIf(token, () => null).status).toBe('consumed');
+    expect(store.consumeRefreshIf(token, () => null).status).toBe('missing');
+  });
+});
+
 describe('PendingAuthStore', () => {
   it('stores and retrieves by id; single-use', () => {
     const store = createPendingAuthStore({ ttlMs: 60_000 });

@@ -110,6 +110,19 @@ describe('HubConfigSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects two tenants pointing at the same configPath', () => {
+    const result = HubConfigSchema.safeParse({
+      tenants: [
+        { slug: 'app-a', configPath: '/abs/shared.json' },
+        { slug: 'app-b', configPath: '/abs/shared.json' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate configPath/.test(i.message))).toBe(true);
+    }
+  });
+
   it('exports isReservedSlug', () => {
     expect(isReservedSlug('admin')).toBe(true);
     expect(isReservedSlug('my-app')).toBe(false);
@@ -200,5 +213,20 @@ describe('ServerSchema.tls', () => {
       server: { ...validBase.server, tls: { hostnames: [''] } },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('server.publicUrl validation', () => {
+  it('rejects a publicUrl with a query string or fragment', () => {
+    for (const publicUrl of ['https://oidc.test/?x=1', 'https://oidc.test/#frag']) {
+      const result = HubConfigSchema.safeParse({ server: { publicUrl } });
+      expect(result.success).toBe(false);
+    }
+  });
+
+  it('accepts a plain https publicUrl', () => {
+    expect(HubConfigSchema.safeParse({ server: { publicUrl: 'https://oidc.test' } }).success).toBe(
+      true,
+    );
   });
 });

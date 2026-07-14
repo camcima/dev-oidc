@@ -5,6 +5,8 @@ import { renderLoginPage } from '@/login/page.js';
 export interface AuthorizeDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
   pathPrefix?: string;
+  /** Maps a tenant slug to its admin page URL. Defaults to the legacy '/admin'. */
+  adminPath?: (slug: string) => string;
 }
 
 interface AuthorizeQuery {
@@ -69,6 +71,17 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       });
     }
 
+    if (client.allowedScopes) {
+      const allowed = new Set(['openid', ...client.allowedScopes]);
+      const denied = scopeTokens.filter((s) => !allowed.has(s));
+      if (denied.length > 0) {
+        return reply.code(400).send({
+          error: 'invalid_scope',
+          error_description: `scope not allowed for this client: ${denied.join(' ')}`,
+        });
+      }
+    }
+
     const pendingAuthId = tenant.pending.create({
       clientId: client.clientId,
       redirectUri: query.redirect_uri,
@@ -87,6 +100,7 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       profiles: config.profiles,
       branding: config.branding,
       actionUrl: `${concretePrefix}/authorize/complete`,
+      adminUrl: deps.adminPath ? deps.adminPath(tenant.slug) : '/admin',
     });
 
     return reply.code(200).type('text/html; charset=utf-8').send(html);

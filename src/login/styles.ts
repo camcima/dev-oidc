@@ -8,6 +8,7 @@ export const STATIC_STYLES = `
     background: #f7f8fa; color: #1a1f2c;
   }
   h1 { font-size: 1.5rem; margin: 0 0 1.5rem; }
+  .logo { display: block; max-height: 48px; max-width: 240px; margin-bottom: 1rem; }
   .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); max-width: 900px; }
   form.tile { margin: 0; }
   button.tile {

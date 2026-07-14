@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createKeyMaterial } from '@/oidc/keys.js';
@@ -191,5 +191,55 @@ describe('createKeyMaterial (configDir resolution)', () => {
     const file = path.join(tmpDir, 'cwd-fallback.json');
     await createKeyMaterial({ kid: 'cwd', alg: 'RS256', source: `file:${file}` });
     expect(existsSync(file)).toBe(true);
+  });
+});
+
+describe('key file integrity', () => {
+  it('rejects a key file whose publicJwk does not match privateJwk', async () => {
+    const dir = makeTmpDir('dev-oidc-keys-integrity-');
+    const filePath = path.join(dir, 'key.json');
+    const config = { kid: 'k1', alg: 'RS256' as const, source: `file:${filePath}` };
+
+    // First boot persists a consistent pair.
+    await createKeyMaterial(config, { configDir: dir });
+
+    // Corrupt the public modulus.
+    const persisted = JSON.parse(readFileSync(filePath, 'utf8'));
+    persisted.publicJwk.n = persisted.publicJwk.n.slice(1) + 'A';
+    writeFileSync(filePath, JSON.stringify(persisted));
+
+    await expect(createKeyMaterial(config, { configDir: dir })).rejects.toThrow(
+      /publicJwk.*does not match/i,
+    );
+  });
+
+  it('rejects a key file whose JWKs are missing the public components entirely', async () => {
+    const dir = makeTmpDir('dev-oidc-keys-missing-');
+    const filePath = path.join(dir, 'key.json');
+
+    // kty-only JWKs pass PersistedKeySchema but carry no public components;
+    // this must trip the correspondence check, not a generic import error.
+    writeFileSync(
+      filePath,
+      JSON.stringify({ kid: 'k1', privateJwk: { kty: 'RSA' }, publicJwk: { kty: 'RSA' } }),
+    );
+
+    await expect(
+      createKeyMaterial(
+        { kid: 'k1', alg: 'RS256', source: `file:${filePath}` },
+        { configDir: dir },
+      ),
+    ).rejects.toThrow(/publicJwk.*does not match/i);
+  });
+
+  it('leaves no temp files behind after saving', async () => {
+    const dir = makeTmpDir('dev-oidc-keys-tmp-');
+    const filePath = path.join(dir, 'key.json');
+    await createKeyMaterial(
+      { kid: 'k1', alg: 'RS256', source: `file:${filePath}` },
+      { configDir: dir },
+    );
+    const leftovers = readdirSync(dir).filter((f) => f.includes('.tmp'));
+    expect(leftovers).toEqual([]);
   });
 });

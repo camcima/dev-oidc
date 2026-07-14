@@ -11,8 +11,9 @@ export interface AssembleClaimsInput {
 
 export type JwtClaims = Record<string, unknown>;
 
-// Names dev-oidc manages itself; profile.claims may never set these.
-const RESERVED: readonly string[] = [
+// Names dev-oidc manages itself; profile.claims and subjectClaim may never
+// set these ("sub" is the one subjectClaim exception).
+export const RESERVED_CLAIM_NAMES: readonly string[] = [
   'sub',
   'name',
   'given_name',
@@ -63,7 +64,7 @@ export function assembleClaims({
 
   // Custom claims first (filtered), so managed claims always win.
   for (const [key, value] of Object.entries(profile.claims)) {
-    if (!RESERVED.includes(key) && key !== subjectClaim) {
+    if (!RESERVED_CLAIM_NAMES.includes(key) && key !== subjectClaim) {
       claims[key] = value;
     }
   }

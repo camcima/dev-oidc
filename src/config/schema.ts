@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { RESERVED_CLAIM_NAMES } from '@/oidc/claims.js';
+import { httpUrl } from '@/shared/url-schema.js';
 
 const SigningKeySchema = z.object({
   kid: z.string().min(1),
@@ -9,15 +11,18 @@ const SigningKeySchema = z.object({
 const ClientSchema = z.object({
   clientId: z.string().min(1),
   clientSecret: z.string().min(1).optional(),
-  redirectUris: z.array(z.string().url()).min(1),
-  postLogoutRedirectUris: z.array(z.string().url()).default([]),
+  redirectUris: z.array(httpUrl()).min(1),
+  postLogoutRedirectUris: z.array(httpUrl()).default([]),
   audience: z.string().min(1),
+  // Opt-in scope policy. Absent = passthrough (the default; scopes are test
+  // data, not authorization grants). 'openid' is always implicitly allowed.
+  allowedScopes: z.array(z.string().min(1)).optional(),
 });
 
 const BrandingInner = z.object({
   title: z.string().default('Dev OIDC Login'),
   accentColor: z.string().default('#1f6feb'),
-  logoUrl: z.string().url().nullable().default(null),
+  logoUrl: httpUrl().nullable().default(null),
 });
 const BrandingSchema = BrandingInner.default(BrandingInner.parse({}));
 
@@ -25,7 +30,7 @@ const ProfileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.string().email(),
-  avatar: z.string().url().nullable().default(null),
+  avatar: httpUrl().nullable().default(null),
   emailVerified: z.boolean().optional(),
   givenName: z.string().min(1).optional(),
   familyName: z.string().min(1).optional(),
@@ -37,7 +42,16 @@ const ProfileSchema = z.object({
 const ConfigBodySchema = z.object({
   signingKey: SigningKeySchema,
   clients: z.array(ClientSchema).min(1),
-  subjectClaim: z.string().default('sub'),
+  subjectClaim: z
+    .string()
+    .regex(
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+      'subjectClaim must be a simple identifier (letters, digits, underscore; not starting with a digit)',
+    )
+    .refine((v) => v === 'sub' || !RESERVED_CLAIM_NAMES.includes(v), {
+      message: 'subjectClaim must not be a reserved JWT/OIDC claim name (only "sub" is allowed)',
+    })
+    .default('sub'),
   tokenTtlSeconds: z.number().int().positive().default(900),
   refreshTokenTtlSeconds: z.number().int().positive().default(28800),
   branding: BrandingSchema,
@@ -99,6 +113,49 @@ export const ConfigSchema = ConfigBodySchema.passthrough().superRefine((value, c
         message: `Unrecognized key: "${key}"`,
       });
     }
+  }
+
+  // Identity uniqueness: handlers select clients/profiles with Array.find,
+  // so a duplicate id silently shadows every later entry.
+  const seenClientIds = new Set<string>();
+  for (const [i, client] of value.clients.entries()) {
+    if (seenClientIds.has(client.clientId)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['clients', i, 'clientId'],
+        message: `duplicate clientId "${client.clientId}"`,
+      });
+    }
+    seenClientIds.add(client.clientId);
+
+    for (const [listName, uris] of [
+      ['redirectUris', client.redirectUris],
+      ['postLogoutRedirectUris', client.postLogoutRedirectUris],
+    ] as const) {
+      const seenUris = new Set<string>();
+      for (const [j, uri] of uris.entries()) {
+        if (seenUris.has(uri)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['clients', i, listName, j],
+            message: `duplicate ${listName} entry "${uri}"`,
+          });
+        }
+        seenUris.add(uri);
+      }
+    }
+  }
+
+  const seenProfileIds = new Set<string>();
+  for (const [i, profile] of value.profiles.entries()) {
+    if (seenProfileIds.has(profile.id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['profiles', i, 'id'],
+        message: `duplicate profile id "${profile.id}"`,
+      });
+    }
+    seenProfileIds.add(profile.id);
   }
 }) as unknown as typeof ConfigBodySchema;
 

@@ -124,6 +124,38 @@ describe('ConfigSchema', () => {
   });
 });
 
+describe('subjectClaim constraints', () => {
+  const withSubjectClaim = (subjectClaim: string) => ({
+    signingKey: { kid: 'k1' },
+    clients: [{ clientId: 'app', redirectUris: ['http://localhost:3000/cb'], audience: 'api' }],
+    profiles: [],
+    subjectClaim,
+  });
+
+  it('accepts "sub", "oid", and snake_case identifiers', () => {
+    for (const name of ['sub', 'oid', 'user_id']) {
+      expect(ConfigSchema.safeParse(withSubjectClaim(name)).success).toBe(true);
+    }
+  });
+
+  it('rejects the empty string', () => {
+    expect(ConfigSchema.safeParse(withSubjectClaim('')).success).toBe(false);
+  });
+
+  it('rejects reserved claim names other than "sub"', () => {
+    for (const name of ['scope', 'iss', 'aud', 'exp', 'email', 'name']) {
+      const result = ConfigSchema.safeParse(withSubjectClaim(name));
+      expect(result.success, `subjectClaim "${name}" should be rejected`).toBe(false);
+    }
+  });
+
+  it('rejects non-identifier strings', () => {
+    for (const name of ['9lives', 'has space', 'dash-claim', 'dot.claim']) {
+      expect(ConfigSchema.safeParse(withSubjectClaim(name)).success).toBe(false);
+    }
+  });
+});
+
 function baseConfig(profileExtra: Record<string, unknown>) {
   return {
     signingKey: { kid: 'k1' },
@@ -183,5 +215,121 @@ describe('Project ConfigSchema rejects misplaced TLS', () => {
         ),
       ).toBe(true);
     }
+  });
+});
+
+describe('ConfigSchema identity uniqueness', () => {
+  const client = (over: Record<string, unknown> = {}) => ({
+    clientId: 'app',
+    redirectUris: ['http://localhost:3000/cb'],
+    audience: 'api',
+    ...over,
+  });
+  const base = {
+    signingKey: { kid: 'k1' },
+    clients: [client()],
+    profiles: [{ id: 'alice', displayName: 'Alice', email: 'alice@example.com' }],
+  };
+
+  it('rejects duplicate clientId values', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client(), client({ redirectUris: ['http://localhost:4000/cb'] })],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate clientId "app"/.test(i.message))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects duplicate profile ids', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      profiles: [
+        { id: 'alice', displayName: 'Alice', email: 'alice@example.com' },
+        { id: 'alice', displayName: 'Alice 2', email: 'alice2@example.com' },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => /duplicate profile id "alice"/.test(i.message))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('rejects duplicate entries within redirectUris', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client({ redirectUris: ['http://localhost:3000/cb', 'http://localhost:3000/cb'] })],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects duplicate entries within postLogoutRedirectUris', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [
+        client({
+          postLogoutRedirectUris: ['http://localhost:3000/', 'http://localhost:3000/'],
+        }),
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts distinct clients, profiles, and URIs', () => {
+    const result = ConfigSchema.safeParse({
+      ...base,
+      clients: [client(), client({ clientId: 'app2' })],
+      profiles: [
+        { id: 'alice', displayName: 'Alice', email: 'alice@example.com' },
+        { id: 'bob', displayName: 'Bob', email: 'bob@example.com' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('protocol URL validation', () => {
+  const withRedirect = (uri: string) => ({
+    signingKey: { kid: 'k1' },
+    clients: [{ clientId: 'app', redirectUris: [uri], audience: 'api' }],
+    profiles: [],
+  });
+
+  it('rejects redirect URIs with fragments or credentials', () => {
+    expect(ConfigSchema.safeParse(withRedirect('http://localhost:3000/cb#frag')).success).toBe(
+      false,
+    );
+    expect(ConfigSchema.safeParse(withRedirect('http://u:p@localhost:3000/cb')).success).toBe(
+      false,
+    );
+  });
+
+  it('keeps accepting redirect URIs with query strings', () => {
+    expect(
+      ConfigSchema.safeParse(withRedirect('http://localhost:3000/cb?provider=dev')).success,
+    ).toBe(true);
+  });
+});
+
+describe('client allowedScopes', () => {
+  it('accepts an optional allowedScopes list on a client', () => {
+    const parsed = ConfigSchema.parse({
+      signingKey: { kid: 'k1' },
+      clients: [
+        {
+          clientId: 'app',
+          redirectUris: ['http://localhost:3000/cb'],
+          audience: 'api',
+          allowedScopes: ['profile', 'email'],
+        },
+      ],
+      profiles: [],
+    });
+    expect(parsed.clients[0]!.allowedScopes).toEqual(['profile', 'email']);
   });
 });

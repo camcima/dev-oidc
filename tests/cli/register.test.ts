@@ -72,6 +72,16 @@ describe('register', () => {
     expect(result.stderr).toMatch(/already registered/);
   });
 
+  it('refuses to register a configPath that another slug already uses', async () => {
+    const hub = newHub();
+    const cfg = newProject();
+    await runRegister({ hubConfigPath: hub, configPathArg: cfg, slug: 'one' });
+    const result = await runRegister({ hubConfigPath: hub, configPathArg: cfg, slug: 'two' });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toMatch(/already registered/);
+    expect(result.stderr).toMatch(/already registered to slug "one"/);
+  });
+
   it('rejects when project config is invalid', async () => {
     const hub = newHub();
     const dir = makeTmpDir('dev-oidc-bad-');

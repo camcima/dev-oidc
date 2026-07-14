@@ -26,11 +26,24 @@ export interface CodeStoreOptions {
   maxEntries?: number;
 }
 
+export type ConsumeResult<T> =
+  | { status: 'consumed'; record: T }
+  | { status: 'missing' }
+  | { status: 'rejected'; reason: string };
+
 export interface CodeStore {
   issue: (record: CodeRecord) => string;
   consume: (code: string) => CodeRecord | null;
+  consumeIf: (
+    code: string,
+    check: (record: CodeRecord) => string | null,
+  ) => ConsumeResult<CodeRecord>;
   issueRefresh: (record: RefreshRecord) => string;
   consumeRefresh: (token: string) => RefreshRecord | null;
+  consumeRefreshIf: (
+    token: string,
+    check: (record: RefreshRecord) => string | null,
+  ) => ConsumeResult<RefreshRecord>;
   /** Total live entries (codes + refresh tokens). For observability/tests. */
   size: () => number;
 }
@@ -44,6 +57,23 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
   const mint = (bytes: number): string => randomBytes(bytes).toString('base64url');
   const isExpired = (e: Entry<unknown>): boolean => Date.now() > e.expiresAt;
 
+  function consumeFrom<T>(
+    map: Map<string, Entry<T>>,
+    key: string,
+    check: (record: T) => string | null,
+  ): ConsumeResult<T> {
+    const entry = map.get(key);
+    if (!entry) return { status: 'missing' };
+    if (isExpired(entry)) {
+      map.delete(key);
+      return { status: 'missing' };
+    }
+    const reason = check(entry.value);
+    if (reason !== null) return { status: 'rejected', reason };
+    map.delete(key);
+    return { status: 'consumed', record: entry.value };
+  }
+
   return {
     issue(record) {
       evictForInsert(codes, maxEntries);
@@ -52,11 +82,11 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return code;
     },
     consume(code) {
-      const entry = codes.get(code);
-      if (!entry) return null;
-      codes.delete(code);
-      if (isExpired(entry)) return null;
-      return entry.value;
+      const result = consumeFrom(codes, code, () => null);
+      return result.status === 'consumed' ? result.record : null;
+    },
+    consumeIf(code, check) {
+      return consumeFrom(codes, code, check);
     },
     issueRefresh(record) {
       evictForInsert(refresh, maxEntries);
@@ -65,11 +95,11 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return token;
     },
     consumeRefresh(token) {
-      const entry = refresh.get(token);
-      if (!entry) return null;
-      refresh.delete(token);
-      if (isExpired(entry)) return null;
-      return entry.value;
+      const result = consumeFrom(refresh, token, () => null);
+      return result.status === 'consumed' ? result.record : null;
+    },
+    consumeRefreshIf(token, check) {
+      return consumeFrom(refresh, token, check);
     },
     size() {
       return codes.size + refresh.size;

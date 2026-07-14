@@ -134,7 +134,7 @@ Compose snippet (Linux/WSL):
 ```yaml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.4.0
+    image: ghcr.io/camcima/dev-oidc:0.4.1
     ports:
       - '8095:8095'
     volumes:
@@ -159,7 +159,7 @@ Same-port HTTP→HTTPS redirect via [`@httptoolkit/httpolyglot`](https://github.
 docker run --rm -p 8095:8095 \
   -v "$(pwd)/dev-oidc.config.json:/config/config.json:ro" \
   -v dev-oidc-data:/data \
-  ghcr.io/camcima/dev-oidc:0.4.0
+  ghcr.io/camcima/dev-oidc:0.4.1
 ```
 
 - `/config/config.json` — your config file (see [Config reference](#config-reference)).
@@ -175,7 +175,7 @@ The image listens on port `8095` inside the container. If you map it to a differ
 # docker-compose.yml
 services:
   dev-oidc:
-    image: ghcr.io/camcima/dev-oidc:0.4.0
+    image: ghcr.io/camcima/dev-oidc:0.4.1
     volumes:
       - ./dev-oidc.config.json:/config/config.json:ro
       - dev-oidc-data:/data
@@ -283,7 +283,9 @@ Every field in `dev-oidc.config.json`:
       "clientId": "my-app", // What your app sends as `client_id`.
       "clientSecret": "s3cr3t", // Optional. Omit for public clients (no secret required).
       "redirectUris": [
-        // Exact-match allowlist.
+        // Exact-match allowlist. Must be http(s) URLs — no custom app
+        // schemes (e.g. "com.example.app://callback"), fragments, or
+        // embedded credentials.
         "http://localhost:5173/auth/callback",
       ],
       "postLogoutRedirectUris": [
@@ -291,6 +293,7 @@ Every field in `dev-oidc.config.json`:
         "http://localhost:5173/",
       ],
       "audience": "my-api", // Required. Populates the JWT `aud` claim.
+      "allowedScopes": ["profile", "email"], // Optional. Opt-in scope allowlist — see "Scope propagation" below.
     },
   ],
   "subjectClaim": "sub", // Default "sub". Use "oid" for Azure AD / Entra compat.
@@ -402,6 +405,13 @@ The `scope` parameter is propagated end-to-end:
 - The `/token` response `scope` field reflects the scope the client actually requested, not a hardcoded string.
 - Access tokens carry a `scope` claim with the same value.
 
+> **Scopes are test data, not authorization grants.** dev-oidc signs whatever
+> scopes the client requests into the access token so you can exercise any
+> scope your real IdP would issue. A resource server must never treat a
+> dev-oidc scope as a granted permission. To simulate an IdP that enforces a
+> scope policy, set `allowedScopes` on the client: requests containing any
+> other scope are rejected with `invalid_scope` (`openid` is always allowed).
+
 ### Refresh token rotation
 
 dev-oidc rotates refresh tokens on every use. The consumed token becomes invalid as soon as `/token` returns the new one. Apps that previously cached a single refresh token must capture and store the new `refresh_token` from each `/token` response.
@@ -468,6 +478,19 @@ Caveat: Google access tokens are opaque; dev-oidc's are signed JWTs (more useful
 - **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
 - **No authentication on `/admin`.**
 - **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
+
+### What a refresh re-reads
+
+Refreshing a token re-resolves the profile from the **current** config: the
+profile's identity fields, custom `claims`, `subjectClaim`, and the access/ID-token
+TTL (`tokenTtlSeconds`) are all read live, so editing a profile changes the claims
+of already-authorized sessions on their next refresh (deleting the profile
+invalidates them). The refresh token's own lifetime (`refreshTokenTtlSeconds`) is
+not re-read — it stays fixed at whatever was active when the tenant started (see
+the hot-reload limitation above). The **scope** is likewise fixed: it was set at
+the original `/authorize` request and is carried through refreshes unchanged. This
+is deliberate test-double behavior, not how a production IdP treats an existing
+grant.
 
 ---
 
