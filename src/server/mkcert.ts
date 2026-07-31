@@ -96,7 +96,7 @@ export async function ensureCertPair(args: EnsureCertPairArgs): Promise<CertPair
   const keyPath = path.join(args.cacheDir, `${key}-key.pem`);
 
   const certValid = await existsAndValid(certPath, 30);
-  let keyExists = false;
+  let keyExists: boolean;
   try {
     await stat(keyPath);
     keyExists = true;

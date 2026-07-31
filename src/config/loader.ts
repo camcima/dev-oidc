@@ -8,7 +8,7 @@ export async function loadConfig(filePath: string): Promise<Config> {
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
     if (nodeError.code === 'ENOENT') {
-      throw new Error(`dev-oidc: config file not found at ${filePath}`);
+      throw new Error(`dev-oidc: config file not found at ${filePath}`, { cause: error });
     }
     throw error;
   }
@@ -18,7 +18,7 @@ export async function loadConfig(filePath: string): Promise<Config> {
     parsed = JSON.parse(raw);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`dev-oidc: invalid JSON in ${filePath}: ${message}`);
+    throw new Error(`dev-oidc: invalid JSON in ${filePath}: ${message}`, { cause: error });
   }
 
   const result = ConfigSchema.safeParse(parsed);

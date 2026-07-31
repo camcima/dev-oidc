@@ -34,7 +34,9 @@ export async function loadHubConfig(filePath: string): Promise<HubConfig> {
     parsed = JSON.parse(raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`dev-oidc: invalid JSON in hub config ${filePath}: ${message}`);
+    throw new Error(`dev-oidc: invalid JSON in hub config ${filePath}: ${message}`, {
+      cause: err,
+    });
   }
 
   const result = HubConfigSchema.safeParse(parsed);
@@ -104,6 +106,7 @@ export async function mutateHubConfig(
         throw new Error(
           `dev-oidc: timed out waiting for ${lockPath}; another process may be editing the hub config. ` +
             `If you're sure no other process is running, delete the lock file manually.`,
+          { cause: err },
         );
       }
       await delay(LOCK_RETRY_MS);

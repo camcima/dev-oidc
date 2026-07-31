@@ -11,7 +11,7 @@ export type SigningAlg = 'RS256' | 'ES256';
 export interface KeyMaterial {
   kid: string;
   alg: SigningAlg;
-  privateKey: jose.KeyLike;
+  privateKey: jose.CryptoKey;
   publicJwk: jose.JWK;
 }
 
@@ -50,7 +50,7 @@ async function generateEphemeralKey(kid: string, alg: SigningAlg): Promise<KeyMa
 
 // Minimum-viable JWK shape: a `kty` discriminator plus arbitrary other
 // fields (jose validates the algorithm-specific bits during importJWK).
-const JwkSchema = z.object({ kty: z.string().min(1) }).passthrough();
+const JwkSchema = z.looseObject({ kty: z.string().min(1) });
 
 const PersistedKeySchema = z.object({
   kid: z.string().min(1),
@@ -88,7 +88,9 @@ async function loadKeyFromFile(
     json = JSON.parse(raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`dev-oidc: signing key at ${filePath} is not valid JSON: ${message}`);
+    throw new Error(`dev-oidc: signing key at ${filePath} is not valid JSON: ${message}`, {
+      cause: err,
+    });
   }
   const result = PersistedKeySchema.safeParse(json);
   if (!result.success) {
@@ -112,8 +114,11 @@ async function loadKeyFromFile(
     );
   }
 
-  const privateKty = parsed.privateJwk.kty;
-  const publicKty = parsed.publicJwk.kty;
+  // JwkSchema requires a non-empty `kty`, so both are guaranteed present here.
+  // The loose index signature widens them to `string | undefined` under
+  // `noUncheckedIndexedAccess`, which the assertions undo.
+  const privateKty = parsed.privateJwk.kty as string;
+  const publicKty = parsed.publicJwk.kty as string;
   const components = PUBLIC_COMPONENTS[privateKty];
   if (!components) {
     throw new Error(
@@ -138,7 +143,7 @@ async function loadKeyFromFile(
     }
   }
 
-  const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.KeyLike;
+  const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.CryptoKey;
   const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
   return { kid, alg: configAlg, privateKey, publicJwk };
 }
