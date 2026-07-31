@@ -11,7 +11,7 @@ export type SigningAlg = 'RS256' | 'ES256';
 export interface KeyMaterial {
   kid: string;
   alg: SigningAlg;
-  privateKey: jose.KeyLike;
+  privateKey: jose.CryptoKey;
   publicJwk: jose.JWK;
 }
 
@@ -88,7 +88,9 @@ async function loadKeyFromFile(
     json = JSON.parse(raw);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`dev-oidc: signing key at ${filePath} is not valid JSON: ${message}`);
+    throw new Error(`dev-oidc: signing key at ${filePath} is not valid JSON: ${message}`, {
+      cause: err,
+    });
   }
   const result = PersistedKeySchema.safeParse(json);
   if (!result.success) {
@@ -114,6 +116,11 @@ async function loadKeyFromFile(
 
   const privateKty = parsed.privateJwk.kty;
   const publicKty = parsed.publicJwk.kty;
+  if (!privateKty) {
+    throw new Error(
+      `dev-oidc: signing key at ${filePath} has a privateJwk with no "kty". Delete the file to regenerate.`,
+    );
+  }
   const components = PUBLIC_COMPONENTS[privateKty];
   if (!components) {
     throw new Error(
@@ -138,7 +145,7 @@ async function loadKeyFromFile(
     }
   }
 
-  const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.KeyLike;
+  const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.CryptoKey;
   const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
   return { kid, alg: configAlg, privateKey, publicJwk };
 }
