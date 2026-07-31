@@ -50,7 +50,7 @@ async function generateEphemeralKey(kid: string, alg: SigningAlg): Promise<KeyMa
 
 // Minimum-viable JWK shape: a `kty` discriminator plus arbitrary other
 // fields (jose validates the algorithm-specific bits during importJWK).
-const JwkSchema = z.object({ kty: z.string().min(1) }).passthrough();
+const JwkSchema = z.looseObject({ kty: z.string().min(1) });
 
 const PersistedKeySchema = z.object({
   kid: z.string().min(1),
@@ -114,13 +114,11 @@ async function loadKeyFromFile(
     );
   }
 
-  const privateKty = parsed.privateJwk.kty;
-  const publicKty = parsed.publicJwk.kty;
-  if (!privateKty) {
-    throw new Error(
-      `dev-oidc: signing key at ${filePath} has a privateJwk with no "kty". Delete the file to regenerate.`,
-    );
-  }
+  // JwkSchema requires a non-empty `kty`, so both are guaranteed present here.
+  // The loose index signature widens them to `string | undefined` under
+  // `noUncheckedIndexedAccess`, which the assertions undo.
+  const privateKty = parsed.privateJwk.kty as string;
+  const publicKty = parsed.publicJwk.kty as string;
   const components = PUBLIC_COMPONENTS[privateKty];
   if (!components) {
     throw new Error(
