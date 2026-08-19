@@ -134,7 +134,10 @@ async function runStart(
       typeof values['public-url'] === 'string'
         ? values['public-url']
         : process.env.DEV_OIDC_PUBLIC_URL?.trim() || undefined;
-    if (!Number.isFinite(port) || port < 0 || port > 65535) {
+    // Port 0 would bind an ephemeral port while the issuer still advertised
+    // ":0", so relying parties could never reach it. Reject rather than
+    // silently publish an unusable issuer.
+    if (!Number.isFinite(port) || port < 1 || port > 65535) {
       process.stderr.write('dev-oidc: --port must be a valid port number\n');
       process.exit(1);
     }
@@ -184,7 +187,6 @@ async function runStart(
 
   // Hub mode
   const { createHubServer } = await import('@/hub/server.js');
-  const { defaultHubConfigPath } = await import('@/hub/loader.js');
   const hubConfigPath =
     typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
   const server = await createHubServer({ hubConfigPath, logger });

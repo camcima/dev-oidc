@@ -1,4 +1,5 @@
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -48,9 +49,16 @@ export async function loadHubConfig(filePath: string): Promise<HubConfig> {
 
 export async function saveHubConfig(filePath: string, config: HubConfig): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.tmp`;
-  await writeFile(tmp, JSON.stringify(config, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
-  await rename(tmp, filePath);
+  // Unique suffix so concurrent writers never share a temp file — the
+  // bootstrap save in loadHubConfig runs outside the lockfile.
+  const tmp = `${filePath}.${randomBytes(6).toString('hex')}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(config, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 });
+    await rename(tmp, filePath);
+  } catch (error) {
+    await unlink(tmp).catch(() => undefined);
+    throw error;
+  }
 }
 
 const LOCK_TIMEOUT_MS = 5_000;

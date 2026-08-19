@@ -43,8 +43,9 @@ export function registerUserInfo(app: FastifyInstance, deps: UserInfoDeps): void
 
     let payload: jose.JWTPayload;
     try {
-      const key = await jose.importJWK(tenant.keyMaterial.publicJwk, tenant.keyMaterial.alg);
-      ({ payload } = await jose.jwtVerify(token, key, { issuer: tenant.issuer }));
+      ({ payload } = await jose.jwtVerify(token, tenant.keyMaterial.publicKey, {
+        issuer: tenant.issuer,
+      }));
     } catch {
       return unauthorized(reply, true);
     }

@@ -24,7 +24,6 @@ function tenant(issuer = 'http://localhost:8095'): ActiveTenantState {
     slug: '(legacy)',
     configPath: '',
     status: 'active',
-    config: cfg,
     issuer,
     runtime,
     keyMaterial: null as never,

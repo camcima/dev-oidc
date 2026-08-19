@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { withConfigLock } from '@/config/mutex.js';
 import { writeConfigFile } from '@/config/writer.js';
-import type { Profile } from '@/config/schema.js';
+import type { Config, Profile } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { httpUrl } from '@/shared/url-schema.js';
 
@@ -11,16 +11,19 @@ export interface ProfilesRoutesDeps {
   pathPrefix?: string;
 }
 
+// Optional fields accept null as well as absence: the admin form submits null
+// for a field the user left blank, and a create call should treat that the
+// same as omitting it.
 const ProfileInput = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
-  email: z.string().email(),
-  avatar: httpUrl().nullable().optional(),
-  emailVerified: z.boolean().optional(),
-  givenName: z.string().min(1).optional(),
-  familyName: z.string().min(1).optional(),
-  locale: z.string().min(1).optional(),
-  hostedDomain: z.string().min(1).optional(),
+  email: z.email(),
+  avatar: httpUrl().nullish(),
+  emailVerified: z.boolean().nullish(),
+  givenName: z.string().min(1).nullish(),
+  familyName: z.string().min(1).nullish(),
+  locale: z.string().min(1).nullish(),
+  hostedDomain: z.string().min(1).nullish(),
   claims: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -30,12 +33,64 @@ function toProfile(input: z.infer<typeof ProfileInput>): Profile {
     displayName: input.displayName,
     email: input.email,
     avatar: input.avatar ?? null,
-    emailVerified: input.emailVerified,
-    givenName: input.givenName,
-    familyName: input.familyName,
-    locale: input.locale,
-    hostedDomain: input.hostedDomain,
+    emailVerified: input.emailVerified ?? undefined,
+    givenName: input.givenName ?? undefined,
+    familyName: input.familyName ?? undefined,
+    locale: input.locale ?? undefined,
+    hostedDomain: input.hostedDomain ?? undefined,
     claims: input.claims ?? {},
+  };
+}
+
+// PUT is a partial update, not a replacement. The admin edit dialog submits a
+// subset of the schema, and an absent field must mean "leave it alone" — the
+// replace-everything reading silently deleted givenName/familyName/avatar/
+// locale/hostedDomain/emailVerified from the config file on every save.
+// Explicit `null` is how a caller asks to clear an optional field.
+const ProfilePatch = z.object({
+  id: z.string().min(1),
+  displayName: z.string().min(1),
+  email: z.email(),
+  avatar: httpUrl().nullish(),
+  emailVerified: z.boolean().nullish(),
+  givenName: z.string().min(1).nullish(),
+  familyName: z.string().min(1).nullish(),
+  locale: z.string().min(1).nullish(),
+  hostedDomain: z.string().min(1).nullish(),
+  claims: z.record(z.string(), z.unknown()).optional(),
+});
+
+function mergeProfile(existing: Profile, patch: z.infer<typeof ProfilePatch>): Profile {
+  const next: Profile = {
+    ...existing,
+    id: patch.id,
+    displayName: patch.displayName,
+    email: patch.email,
+  };
+  if (patch.avatar !== undefined) next.avatar = patch.avatar;
+  if (patch.emailVerified !== undefined) next.emailVerified = patch.emailVerified ?? undefined;
+  if (patch.givenName !== undefined) next.givenName = patch.givenName ?? undefined;
+  if (patch.familyName !== undefined) next.familyName = patch.familyName ?? undefined;
+  if (patch.locale !== undefined) next.locale = patch.locale ?? undefined;
+  if (patch.hostedDomain !== undefined) next.hostedDomain = patch.hostedDomain ?? undefined;
+  if (patch.claims !== undefined) next.claims = patch.claims;
+  return next;
+}
+
+export const REDACTED = '[redacted]';
+
+/**
+ * Client secrets are never echoed by the admin surfaces. The placeholder is
+ * kept (rather than dropping the key) so a reader can still tell which clients
+ * are confidential. Only the response is masked; what is persisted on disk and
+ * used for client authentication is untouched.
+ */
+export function redactSecrets(config: Config): Config {
+  return {
+    ...config,
+    clients: config.clients.map((client) =>
+      client.clientSecret === undefined ? client : { ...client, clientSecret: REDACTED },
+    ),
   };
 }
 
@@ -44,7 +99,7 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
 
   app.get(`${prefix}/config`, async (request) => {
     const tenant = deps.getTenant(request);
-    return tenant.runtime.get();
+    return redactSecrets(tenant.runtime.get());
   });
 
   app.get(`${prefix}/profiles`, async (request) => {
@@ -77,17 +132,17 @@ export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoute
     `${prefix}/profiles/:id`,
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const tenant = deps.getTenant(request);
-      const parsed = ProfileInput.safeParse(request.body);
+      const parsed = ProfilePatch.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ error: 'invalid_input', details: parsed.error.message });
       }
-      const profile = toProfile(parsed.data);
       return withConfigLock(tenant.configPath, async () => {
         const current = tenant.runtime.get();
         const idx = current.profiles.findIndex((p) => p.id === request.params.id);
         if (idx < 0) {
           return reply.code(404).send({ error: 'not_found' });
         }
+        const profile = mergeProfile(current.profiles[idx]!, parsed.data);
         // A body.id that differs from the URL :id is a rename. Allow it only
         // when the new id doesn't already belong to another profile —
         // otherwise the write would produce two profiles with identical ids

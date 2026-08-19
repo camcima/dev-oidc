@@ -1,11 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { DEFAULT_MAX_ENTRIES, type Entry, evictForInsert } from '@/oidc/expiring-map.js';
 
+/** How long a rendered login page stays submittable. */
+export const DEFAULT_PENDING_TTL_MS = 10 * 60_000;
+
 export interface PendingAuth {
   clientId: string;
   redirectUri: string;
-  codeChallenge: string;
-  codeChallengeMethod: 'S256';
+  /** Absent when the client is allowed to skip PKCE. Always S256 when set. */
+  codeChallenge?: string;
   nonce: string;
   state: string;
   scope: string;

@@ -48,7 +48,7 @@ async function buildApp() {
   const codes = createCodeStore({ ttlMs: 60_000 });
   const app = Fastify();
   await app.register(formbody);
-  const tenant = buildActiveTenant({ config, runtime, pending, codes });
+  const tenant = buildActiveTenant({ runtime, pending, codes });
   registerComplete(app, { getTenant: () => tenant });
   return { app, pending, codes };
 }
@@ -60,7 +60,6 @@ describe('POST /authorize/complete', () => {
       clientId: 'my-app',
       redirectUri: 'http://localhost:5173/auth/callback',
       codeChallenge: 'xyz',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
@@ -88,7 +87,6 @@ describe('POST /authorize/complete', () => {
       clientId: 'my-app',
       redirectUri: 'http://localhost:5173/auth/callback',
       codeChallenge: 'xyz',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
@@ -126,7 +124,6 @@ describe('POST /authorize/complete', () => {
       clientId: 'my-app',
       redirectUri: 'http://localhost:5173/auth/callback',
       codeChallenge: 'xyz',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
@@ -148,7 +145,6 @@ describe('POST /authorize/complete', () => {
       clientId: 'my-app',
       redirectUri: 'http://localhost:5173/auth/callback',
       codeChallenge: 'cc',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid email custom_scope',

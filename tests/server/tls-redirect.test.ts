@@ -27,7 +27,7 @@ const minimalConfig: Config = {
 };
 
 describe('TLS redirect hook', () => {
-  it('returns 301 to https:// when a plain-http request reaches the same-port multiplex', async () => {
+  it('returns 308 to https:// when a plain-http request reaches the same-port multiplex', async () => {
     const tls = {
       cert: readFileSync(path.join(fixtureDir, 'cert.pem')),
       key: readFileSync(path.join(fixtureDir, 'key.pem')),
@@ -49,7 +49,7 @@ describe('TLS redirect hook', () => {
         url: '/.well-known/openid-configuration',
         headers: { host: '127.0.0.1:8095' },
       });
-      expect(response.statusCode).toBe(301);
+      expect(response.statusCode).toBe(308);
       expect(response.headers.location).toBe(
         'https://127.0.0.1:8095/.well-known/openid-configuration',
       );
@@ -76,7 +76,7 @@ describe('TLS redirect hook', () => {
         url: '/.well-known/openid-configuration',
         headers: { host: 'evil.example.com' },
       });
-      expect(response.statusCode).toBe(301);
+      expect(response.statusCode).toBe(308);
       expect(response.headers.location).toBe(
         'https://127.0.0.1:8095/.well-known/openid-configuration',
       );
@@ -104,10 +104,39 @@ describe('TLS redirect hook', () => {
         url: '/.well-known/openid-configuration',
         headers: { host: 'idp.example.test:8095' },
       });
-      expect(response.statusCode).toBe(301);
+      expect(response.statusCode).toBe(308);
       expect(response.headers.location).toBe(
         'https://idp.example.test:8095/.well-known/openid-configuration',
       );
+    } finally {
+      await close();
+    }
+  });
+});
+
+describe('TLS redirect preserves the request method', () => {
+  it('uses 308 so a POST /token is not rewritten into a GET', async () => {
+    const tls = {
+      cert: readFileSync(path.join(fixtureDir, 'cert.pem')),
+      key: readFileSync(path.join(fixtureDir, 'key.pem')),
+    };
+    const { app, close } = await createDevOidcServer({
+      config: minimalConfig,
+      tls,
+      listenHost: '127.0.0.1',
+      listenPort: 8095,
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/token',
+        headers: { host: '127.0.0.1:8095' },
+        payload: 'grant_type=authorization_code',
+      });
+      // 301/302 let clients downgrade POST to GET; 308 forbids it.
+      expect(response.statusCode).toBe(308);
+      expect(response.headers.location).toBe('https://127.0.0.1:8095/token');
     } finally {
       await close();
     }

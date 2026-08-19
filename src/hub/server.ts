@@ -1,22 +1,14 @@
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { configuredOrigins } from '@/server/cors.js';
+import { buildTenantDiscovery, createBaseApp } from '@/server/base.js';
 import path from 'node:path';
-import os from 'node:os';
-import type { RequestListener, Server as HttpServer } from 'node:http';
-import type { TLSSocket } from 'node:tls';
-import httpolyglot from '@httptoolkit/httpolyglot';
-import cors from '@fastify/cors';
-import formbody from '@fastify/formbody';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
-import { expandTildePath } from '@/cli/legacy.js';
+import { defaultCertCacheDir, defaultTlsHostnames, expandTildePath } from '@/shared/paths.js';
 import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
 import { createTenantRegistry, type TenantRegistry } from '@/hub/registry.js';
-import {
-  deriveDefaultPublicUrl,
-  pickRedirectHost,
-  requirePublicUrlOrSafeHost,
-} from '@/hub/issuer.js';
+import { deriveDefaultPublicUrl, requirePublicUrlOrSafeHost } from '@/hub/issuer.js';
 import { isReservedSlug, SLUG_REGEX, type HubConfig } from '@/hub/schema.js';
 import type { ActiveTenantState, ErrorTenantState, TenantState } from '@/hub/tenant-state.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
@@ -24,12 +16,10 @@ import { registerComplete } from '@/oidc/complete.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { registerUserInfo } from '@/oidc/userinfo.js';
-import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { renderHubDashboard, type DashboardTenant } from '@/admin/dashboard.js';
 import { renderAdminPage } from '@/admin/page.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import { createEventsEmitter, registerEventsRoute } from '@/admin/events.js';
-import { buildAdminAllowedHosts, registerAdminGuard } from '@/admin/guard.js';
 import { html, type Html, renderToString } from '@/shared/html.js';
 
 export interface CreateHubServerOptions {
@@ -57,25 +47,6 @@ function resolveTenant(
   if (!tenant) return { kind: 'not-found' };
   if (tenant.status === 'error') return { kind: 'error', tenant };
   return { kind: 'ok', tenant };
-}
-
-function defaultCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME;
-  const root = xdg && xdg.trim().length > 0 ? xdg : path.join(os.homedir(), '.cache');
-  return path.join(root, 'dev-oidc', 'certs');
-}
-
-function defaultHostnames(host: string, publicUrl?: string): string[] {
-  const set = new Set<string>([host, 'localhost']);
-  if (publicUrl) {
-    try {
-      const u = new URL(publicUrl);
-      if (u.hostname) set.add(u.hostname);
-    } catch {
-      // ignore
-    }
-  }
-  return [...set];
 }
 
 function toDashboardTenant(t: TenantState): DashboardTenant {
@@ -142,8 +113,8 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
         : { hostnames: tls.hostnames };
     tlsMaterial = await loadTlsMaterial({
       config: tlsConfig,
-      cacheDir: defaultCacheDir(),
-      defaultHostnames: defaultHostnames(hubConfig.server.host, configPublicUrl),
+      cacheDir: defaultCertCacheDir(),
+      defaultHostnames: defaultTlsHostnames(hubConfig.server.host, configPublicUrl),
     });
     logger.info({ caroot: process.env.CAROOT ?? '(default)' }, 'TLS enabled for hub mode');
   }
@@ -169,52 +140,21 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     onError: (err) => logger.warn({ err }, 'hub config reload failed'),
   });
 
-  // httpolyglot.createServer returns a net.Server that proxies HTTP/HTTPS/HTTP2
-  // requests through the same handler. Fastify's serverFactory expects an
-  // http.Server-shaped value; the multiplexer is structurally compatible at
-  // runtime (it forwards request/response events), so we narrow with a cast and
-  // pin Fastify's RawServer generic to http.Server to match.
-  const app = Fastify<HttpServer>({
-    loggerInstance: logger,
-    ...(tlsMaterial && {
-      serverFactory: (handler: RequestListener): HttpServer =>
-        httpolyglot.createServer(
-          { tls: { cert: tlsMaterial.cert, key: tlsMaterial.key } },
-          handler,
-        ) as unknown as HttpServer,
-    }),
+  const app = await createBaseApp({
+    logger,
+    listenHost: hubConfig.server.host,
+    listenPort: hubConfig.server.port,
+    publicUrl: configPublicUrl,
+    tls: tlsMaterial,
+    corsOrigins: () =>
+      configuredOrigins(
+        registry
+          .list()
+          .filter((t) => t.status === 'active')
+          .map((t) => t.runtime.get()),
+        publicUrl,
+      ),
   });
-
-  if (tlsMaterial) {
-    app.addHook('onRequest', async (req, reply) => {
-      const socket = req.socket as TLSSocket;
-      if (!socket.encrypted) {
-        // Don't echo arbitrary Host headers — `pickRedirectHost` validates
-        // against an allowlist (publicUrl host, listen host:port) before
-        // accepting `req.host`, falling back to a value dev-oidc owns.
-        const host = pickRedirectHost({
-          requestHost: req.host,
-          publicUrl: configPublicUrl,
-          listenHost: hubConfig.server.host,
-          listenPort: hubConfig.server.port,
-        });
-        const target = `https://${host}${req.url}`;
-        await reply.code(301).header('Location', target).send();
-      }
-    });
-  }
-  registerAdminGuard(app, {
-    allowedHosts: buildAdminAllowedHosts({
-      listenHost: hubConfig.server.host,
-      listenPort: hubConfig.server.port,
-      publicUrl: configPublicUrl,
-    }),
-  });
-  await app.register(cors, {
-    origin: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  });
-  await app.register(formbody);
 
   const getTenant = (req: FastifyRequest): ActiveTenantState => {
     return (req as FastifyRequest & { tenant: ActiveTenantState }).tenant;
@@ -246,19 +186,9 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     async (scope) => {
       scope.addHook('preHandler', tenantPreHandler);
 
-      scope.get('/:slug/.well-known/openid-configuration', async (req) => {
-        const tenant = getTenant(req);
-        const cfg = tenant.runtime.get();
-        const hasSecretClient = cfg.clients.some((c) => c.clientSecret !== undefined);
-        const authMethods: ('none' | 'client_secret_post' | 'client_secret_basic')[] =
-          hasSecretClient ? ['none', 'client_secret_post', 'client_secret_basic'] : ['none'];
-        return buildDiscoveryDocument({
-          issuer: tenant.issuer,
-          signingAlg: tenant.keyMaterial.alg,
-          authMethods,
-          subjectClaim: cfg.subjectClaim,
-        });
-      });
+      scope.get('/:slug/.well-known/openid-configuration', async (req) =>
+        buildTenantDiscovery(getTenant(req)),
+      );
 
       scope.get('/:slug/.well-known/jwks.json', async (req) => getTenant(req).jwks);
 
@@ -284,6 +214,10 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
   registry.events.on('profilesChanged', forwardConfigChange);
   registry.events.on('added', forwardConfigChange);
   registry.events.on('removed', forwardConfigChange);
+  // statusChanged covers the two cases the others miss: a tenant replaced in
+  // place (same slug, new configPath) and one flipping between active and
+  // error. Without it the dashboard would keep showing stale rows.
+  registry.events.on('statusChanged', forwardConfigChange);
 
   // Admin dashboard.
   app.get('/admin', async (_req, reply) => {

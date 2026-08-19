@@ -77,3 +77,23 @@ describe('buildDiscoveryDocument', () => {
     expect(dflt.claims_supported.filter((c) => c === 'sub')).toHaveLength(1);
   });
 });
+
+describe('discovery advertises the full grant and response-mode surface', () => {
+  it('lists client_credentials among the supported grant types', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
+    expect(doc.grant_types_supported).toContain('client_credentials');
+  });
+
+  it('advertises response_modes_supported so clients need not guess', () => {
+    const doc = buildDiscoveryDocument({
+      issuer: 'http://localhost:8095',
+      signingAlg: 'RS256',
+      authMethods: ['none'],
+    });
+    expect(doc.response_modes_supported).toEqual(['query']);
+  });
+});

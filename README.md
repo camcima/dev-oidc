@@ -21,7 +21,7 @@ A minimal, config-driven OIDC provider for local development.
 
 When you build an app that integrates with an OIDC provider (Azure AD / Entra, Auth0, Keycloak, Okta), local iteration is painful: you either bypass auth in dev (drift between dev and prod) or stand up a full IdP (slow). `dev-oidc` sits where the real IdP would — your app runs its real auth code path (redirect, token exchange, JWT verify, refresh) against a mock that you configure via a JSON file.
 
-- **Full auth-code + PKCE** flow with redirect + login page + token exchange.
+- **Full auth-code + PKCE** flow with redirect + login page + token exchange. PKCE is required of public clients and optional for confidential ones, matching Entra and Auth0.
 - **Refresh tokens** with single-use rotation — each `/token` response carries a fresh `refresh_token`.
 - **`/userinfo` endpoint** — standard OIDC userinfo, so libraries that hydrate the user from userinfo (Passport, Spring Security) work locally.
 - **Profile tiles** on the login page — pick a user with one click, no password.
@@ -31,8 +31,10 @@ When you build an app that integrates with an OIDC provider (Azure AD / Entra, A
 - **RS256 and ES256** signing algorithms, configurable per deployment.
 - **Optional `clientSecret`** — public clients require no secret; confidential clients can use `client_secret_post` or `client_secret_basic`.
 - **End-to-end scope propagation** — `scope` is reflected in the token response and as a claim in the access token.
+- **`client_credentials` grant** for machine-to-machine callers (confidential clients only).
+- **Spec-shaped authorization errors** — failures after `client_id`/`redirect_uri` validation redirect back to the client with `error`/`state`, so your app's error path runs in dev exactly as in production.
 - **Root landing page** at `GET /` listing discovery, JWKS, and (when admin is enabled) the admin link.
-- **Permissive CORS** for browser apps running on `localhost:*`.
+- **CORS for local browser apps** — any loopback origin (`localhost`, `127.0.0.0/8`, `*.localhost`), plus every origin already registered in `redirectUris`/`postLogoutRedirectUris` and the advertised public URL.
 - **OIDC-conformant enough** for `oidc-client-ts`, MSAL, and standard JWT libraries to work against it.
 
 ---
@@ -294,6 +296,7 @@ Every field in `dev-oidc.config.json`:
       ],
       "audience": "my-api", // Required. Populates the JWT `aud` claim.
       "allowedScopes": ["profile", "email"], // Optional. Opt-in scope allowlist — see "Scope propagation" below.
+      "requirePkce": true, // Optional. Default: true for public clients, false for confidential ones.
     },
   ],
   "subjectClaim": "sub", // Default "sub". Use "oid" for Azure AD / Entra compat.
@@ -434,7 +437,13 @@ In **Hub mode**, every OIDC route is namespaced under the tenant slug; replace `
 | `GET /admin`                                  | `GET /admin`                            | Hub dashboard (Hub) / single admin page (Legacy/Docker). |
 | `GET /admin/:slug`                            | —                                       | Per-tenant admin UI (profile CRUD).                      |
 
-All OIDC flows require **PKCE with S256**. No implicit flow. Client secrets are optional — see [Confidential clients](#confidential-clients) below.
+The authorization-code flow uses **PKCE with S256**. No implicit flow. Client secrets are optional — see [Confidential clients](#confidential-clients) below.
+
+**When is PKCE required?** By default, public clients (no `clientSecret`) must send `code_challenge`; confidential clients may omit it, which is how Entra and Auth0 behave and what server-side stacks such as Spring Security expect. Set `clients[].requirePkce` to `true` or `false` to override per client. Whenever a `code_challenge` _is_ supplied, it is always verified at the token endpoint.
+
+**Authorization errors.** Once `client_id` and `redirect_uri` are validated, errors are delivered by redirecting to the registered `redirect_uri` with `error`, `error_description` and the original `state` (RFC 6749 §4.1.2.1). An unknown `client_id` or an unregistered `redirect_uri` still returns `400` — there is nowhere safe to redirect. A failed code exchange revokes the code, as production IdPs do.
+
+**Silent renew.** dev-oidc keeps no browser session, so `prompt=none` answers `error=login_required` immediately rather than rendering a login page into a hidden iframe. Relying parties fall back to an interactive redirect.
 
 CORS is permissive by default (`Access-Control-Allow-Origin` reflects the request's `Origin`) — browser-based OIDC clients can fetch the discovery doc, JWKS, and token endpoint without additional config.
 

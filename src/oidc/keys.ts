@@ -12,6 +12,8 @@ export interface KeyMaterial {
   kid: string;
   alg: SigningAlg;
   privateKey: jose.CryptoKey;
+  /** Imported once at startup; /userinfo verifies a token on every request. */
+  publicKey: jose.CryptoKey;
   publicJwk: jose.JWK;
 }
 
@@ -45,7 +47,7 @@ async function generateEphemeralKey(kid: string, alg: SigningAlg): Promise<KeyMa
     use: 'sig',
     alg,
   };
-  return { kid, alg, privateKey, publicJwk: jwk };
+  return { kid, alg, privateKey, publicKey, publicJwk: jwk };
 }
 
 // Minimum-viable JWK shape: a `kty` discriminator plus arbitrary other
@@ -145,7 +147,8 @@ async function loadKeyFromFile(
 
   const privateKey = (await jose.importJWK(parsed.privateJwk, configAlg)) as jose.CryptoKey;
   const publicJwk: jose.JWK = { ...parsed.publicJwk, alg: configAlg };
-  return { kid, alg: configAlg, privateKey, publicJwk };
+  const publicKey = (await jose.importJWK(publicJwk, configAlg)) as jose.CryptoKey;
+  return { kid, alg: configAlg, privateKey, publicKey, publicJwk };
 }
 
 async function saveKeyToFile(filePath: string, material: KeyMaterial): Promise<void> {

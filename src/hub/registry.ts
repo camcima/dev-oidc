@@ -3,14 +3,15 @@ import path from 'node:path';
 import { loadConfig } from '@/config/loader.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { watchConfig, type ConfigWatcher } from '@/config/watcher.js';
-import { createCodeStore } from '@/oidc/codes.js';
-import { createPendingAuthStore } from '@/oidc/pending.js';
+import { createCodeStore, DEFAULT_CODE_TTL_MS } from '@/oidc/codes.js';
+import { createPendingAuthStore, DEFAULT_PENDING_TTL_MS } from '@/oidc/pending.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import type { HubTenantEntry } from '@/hub/schema.js';
 import type { ActiveTenantState, TenantState } from '@/hub/tenant-state.js';
 import { computeIssuer } from '@/hub/issuer.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
+import { createKeyedMutex } from '@/shared/keyed-mutex.js';
 
 export type TenantRegistryEventMap = {
   added: { slug: string };
@@ -60,17 +61,9 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
   // Per-slug mutex: serializes add/remove for the same slug so concurrent
   // reconcile invocations or competing CLI mutations cannot interleave the
   // load → activate → swap → deactivate sequence.
-  const slugLocks = new Map<string, Promise<unknown>>();
-
-  function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
-    const prev = slugLocks.get(slug) ?? Promise.resolve();
-    const result = prev.then(fn, fn);
-    slugLocks.set(
-      slug,
-      result.catch(() => undefined),
-    );
-    return result;
-  }
+  const slugMutex = createKeyedMutex();
+  const withSlugLock = <T>(slug: string, fn: () => Promise<T>): Promise<T> =>
+    slugMutex.run(slug, fn);
 
   async function activate(entry: HubTenantEntry): Promise<TenantState> {
     const configDir = path.dirname(entry.configPath);
@@ -100,19 +93,24 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
 
     const runtime = createRuntimeConfig(config);
     const codes = createCodeStore({
-      ttlMs: 60_000,
-      refreshTtlMs: config.refreshTokenTtlSeconds * 1_000,
+      ttlMs: DEFAULT_CODE_TTL_MS,
+      refreshTtlMs: () => runtime.get().refreshTokenTtlSeconds * 1_000,
     });
-    const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
+    const pending = createPendingAuthStore({ ttlMs: DEFAULT_PENDING_TTL_MS });
     const jwks = buildJwks(keyMaterial);
     const issuer = computeIssuer({ publicUrl: options.publicUrl, slug: entry.slug });
+
+    // `runtime.set` fires onChange only when the canonical content actually
+    // differs, so this is the single source of profilesChanged: a disk reload
+    // that changes nothing stays silent, and one that does change something
+    // emits exactly once (an extra emit alongside runtime.set double-fired).
+    runtime.onChange(() => events.emit('profilesChanged', { slug: entry.slug }));
 
     let watcher: ConfigWatcher | null = null;
     try {
       watcher = await watchConfig(entry.configPath, {
         onReload: (newConfig) => {
           runtime.set(newConfig);
-          events.emit('profilesChanged', { slug: entry.slug });
         },
         onError: (err) => {
           logger.warn(
@@ -128,13 +126,10 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
       );
     }
 
-    runtime.onChange(() => events.emit('profilesChanged', { slug: entry.slug }));
-
     const active: ActiveTenantState = {
       slug: entry.slug,
       configPath: entry.configPath,
       status: 'active',
-      config,
       runtime,
       keyMaterial,
       jwks,
@@ -171,7 +166,9 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         if (previous) {
           await deactivate(previous);
         }
-        events.emit('added', { slug: entry.slug });
+        // `added` means "this slug is new". Re-activating an existing slug is
+        // a replacement, which consumers should not read as a fresh mount.
+        if (!previous) events.emit('added', { slug: entry.slug });
         events.emit('statusChanged', { slug: entry.slug, status: state.status });
       });
     },

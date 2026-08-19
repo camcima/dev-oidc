@@ -41,7 +41,7 @@ async function buildApp() {
   const runtime = createRuntimeConfig(config);
   const pending = createPendingAuthStore({ ttlMs: 60_000 });
   const app = Fastify();
-  const tenant = buildActiveTenant({ config, runtime, pending });
+  const tenant = buildActiveTenant({ runtime, pending });
   registerAuthorize(app, { getTenant: () => tenant });
   return { app, runtime, pending };
 }
@@ -86,30 +86,36 @@ describe('GET /authorize', () => {
     await app.close();
   });
 
-  it('returns 400 when response_type is not "code"', async () => {
+  it('redirects with unsupported_response_type when response_type is not "code"', async () => {
     const { app } = await buildApp();
     const params = new URLSearchParams(validParams);
     params.set('response_type', 'token');
     const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.searchParams.get('error')).toBe('unsupported_response_type');
     await app.close();
   });
 
-  it('returns 400 when code_challenge_method is not S256', async () => {
+  it('redirects with invalid_request when code_challenge_method is not S256', async () => {
     const { app } = await buildApp();
     const params = new URLSearchParams(validParams);
     params.set('code_challenge_method', 'plain');
     const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.searchParams.get('error')).toBe('invalid_request');
     await app.close();
   });
 
-  it('returns 400 when code_challenge is missing', async () => {
+  it('redirects with invalid_request when a public client omits code_challenge', async () => {
     const { app } = await buildApp();
     const params = new URLSearchParams(validParams);
     params.delete('code_challenge');
     const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.searchParams.get('error')).toBe('invalid_request');
     await app.close();
   });
 
@@ -126,13 +132,14 @@ describe('GET /authorize', () => {
     await app.close();
   });
 
-  it('returns 400 invalid_scope when the requested scope does not include openid', async () => {
+  it('redirects with invalid_scope when the requested scope does not include openid', async () => {
     const { app } = await buildApp();
     const params = new URLSearchParams(validParams);
     params.set('scope', 'profile email');
     const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe('invalid_scope');
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
     await app.close();
   });
 
@@ -154,7 +161,7 @@ describe('GET /authorize', () => {
     const runtime = createRuntimeConfig(config);
     const pending = createPendingAuthStore({ ttlMs: 60_000 });
     const app = Fastify();
-    const tenant = buildActiveTenant({ slug: 'acme', config, runtime, pending });
+    const tenant = buildActiveTenant({ slug: 'acme', runtime, pending });
     registerAuthorize(app, { getTenant: () => tenant, adminPath: (slug) => `/admin/${slug}` });
 
     const res = await app.inject({ method: 'GET', url: `/authorize?${validParams}` });
@@ -192,7 +199,7 @@ describe('allowedScopes policy', () => {
     const runtime = createRuntimeConfig(config);
     const pending = createPendingAuthStore({ ttlMs: 60_000 });
     const app = Fastify();
-    const tenant = buildActiveTenant({ config, runtime, pending });
+    const tenant = buildActiveTenant({ runtime, pending });
     registerAuthorize(app, { getTenant: () => tenant });
     return { app, runtime, pending };
   }
@@ -203,9 +210,10 @@ describe('allowedScopes policy', () => {
     params.set('client_id', 'scoped-app');
     params.set('scope', 'openid profile admin');
     const res = await app.inject({ method: 'GET', url: `/authorize?${params}` });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error).toBe('invalid_scope');
-    expect(res.json().error_description).toContain('admin');
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.searchParams.get('error')).toBe('invalid_scope');
+    expect(location.searchParams.get('error_description')).toContain('admin');
     await app.close();
   });
 

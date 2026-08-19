@@ -56,20 +56,53 @@ const TlsSchema = z
     }
   });
 
-const ServerSchema = z.object({
+// `looseObject` rather than `object` so unknown keys reach the refinement
+// below instead of being silently stripped. Plain z.object() dropped a typo
+// like `pubicUrl` without a word, and destroyed the "//" comment keys the
+// shipped examples/hub.json relies on whenever the CLI rewrote the file.
+const ServerSchema = z.looseObject({
   port: z.number().int().positive().default(8095),
   host: z.string().default('127.0.0.1'),
   publicUrl: httpUrl({ allowQuery: false }).optional(),
   tls: TlsSchema.optional(),
 });
 
+/** Keys beginning with "//" are JSON's idiomatic comment convention. */
+function isCommentKey(key: string): boolean {
+  return key.startsWith('//');
+}
+
+function rejectUnknownKeys(
+  value: Record<string, unknown>,
+  known: Set<string>,
+  ctx: z.RefinementCtx,
+  basePath: (string | number)[],
+): void {
+  for (const key of Object.keys(value)) {
+    if (known.has(key) || isCommentKey(key)) continue;
+    ctx.addIssue({
+      code: 'custom',
+      path: [...basePath, key],
+      message: `Unrecognized key: "${key}"`,
+    });
+  }
+}
+
+const KNOWN_SERVER_KEYS = new Set(['port', 'host', 'publicUrl', 'tls']);
+const KNOWN_ROOT_KEYS = new Set(['version', 'server', 'tenants']);
+
 export const HubConfigSchema = z
-  .object({
+  .looseObject({
     version: z.literal('1').default('1'),
     server: ServerSchema.default({ port: 8095, host: '127.0.0.1' }),
     tenants: z.array(TenantEntrySchema).default([]),
   })
   .superRefine((value, ctx) => {
+    rejectUnknownKeys(value as Record<string, unknown>, KNOWN_ROOT_KEYS, ctx, []);
+    rejectUnknownKeys(value.server as unknown as Record<string, unknown>, KNOWN_SERVER_KEYS, ctx, [
+      'server',
+    ]);
+
     const seen = new Set<string>();
     for (const [i, t] of value.tenants.entries()) {
       if (seen.has(t.slug)) {

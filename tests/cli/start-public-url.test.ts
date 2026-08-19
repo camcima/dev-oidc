@@ -109,7 +109,7 @@ describe('CLI DEV_OIDC_PUBLIC_URL fallback', () => {
       return { ...actual, startLegacy };
     });
 
-    await runCli(['start', '--config', cfg, '--host', '0.0.0.0', '--port', '0']);
+    await runCli(['start', '--config', cfg, '--host', '0.0.0.0', '--port', '8095']);
 
     expect(startLegacy).toHaveBeenCalledTimes(1);
     const firstCall = startLegacy.mock.calls[0];

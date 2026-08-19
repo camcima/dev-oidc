@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`client_credentials` grant.** Confidential clients (those with a `clientSecret`) can now request a machine-to-machine access token. Per RFC 6749 §4.4.3 the response carries no `id_token` and no `refresh_token`, `openid` is not required, and `allowedScopes` is enforced. The token's `sub` and `client_id` are the client id.
+- **`clients[].requirePkce`.** Overrides whether `/authorize` demands PKCE for that client.
+- Discovery now advertises `response_modes_supported` (`["query"]`) and lists `client_credentials` in `grant_types_supported`.
+- The admin profile editor now exposes every optional profile field (`givenName`, `familyName`, `avatar`, `locale`, `hostedDomain`, `emailVerified`); leaving one blank clears it.
+
+### Changed (BREAKING)
+
+- **Authorization errors now redirect instead of returning JSON.** Once `client_id` and `redirect_uri` are validated, `/authorize` failures (`unsupported_response_type`, `invalid_scope`, missing/invalid PKCE parameters) are delivered by redirecting to the registered `redirect_uri` with `error`, `error_description` and `state`, per RFC 6749 §4.1.2.1. Previously these returned `400` with a JSON body, so a relying party's error-callback path was never exercised against dev-oidc and browser users saw a raw JSON object. An unknown `client_id` or unregistered `redirect_uri` still returns `400`.
+- **PKCE is no longer required of confidential clients.** Public clients must still send `code_challenge`; clients with a `clientSecret` may omit it, matching Entra and Auth0. A supplied `code_challenge` is always verified. Use `requirePkce` to restore the old behaviour per client.
+- **A failed authorization-code exchange now revokes the code.** A wrong `code_verifier`, `redirect_uri` or `client_id` burns the code, as the RFC directs and production IdPs do; previously a retry could succeed in dev while the same client failed in production. Refresh tokens deliberately keep the lenient behaviour — single-use rotation already defeats replay.
+- **`prompt=none` answers `error=login_required`.** dev-oidc keeps no session, so it previously rendered a login page into silent-renew iframes, which hung until the relying party timed out.
+- **CORS is limited to local development origins.** Previously any `Origin` was reflected, which let an arbitrary website drive a full authorization flow against a developer's machine and read the resulting tokens. Now allowed: loopback origins (`localhost`, `127.0.0.0/8`, `*.localhost`), every origin already present in a client's `redirectUris`/`postLogoutRedirectUris`, and the advertised public URL. Requests without an `Origin` header are unaffected.
+- **`hub.json` rejects unknown keys.** A misspelling such as `pubicUrl` was previously dropped in silence. Keys beginning with `//` are still accepted as comments — and are now preserved when the CLI rewrites the file.
+- **The HTTP→HTTPS redirect uses 308 instead of 301.** 301 permits clients to rewrite `POST` to `GET`, which silently turned a misconfigured `POST /token` into a `GET`.
+- **`dev-oidc start --port 0` is rejected.** It bound an ephemeral port while advertising an issuer of `:0`.
+- **`package.json` `main` points at `dist/index.cjs`.** It previously pointed at the ESM build, so a `require()` that ignores `exports` loaded ESM and threw.
+
+### Fixed
+
+- **The admin UI no longer destroys profile fields it does not display.** `PUT /admin/api/profiles/:id` treated the body as a full replacement while the edit dialog submitted only `id`/`displayName`/`email`/`claims`, so saving any edit silently deleted `givenName`, `familyName`, `avatar`, `locale`, `hostedDomain` and `emailVerified` from the config file. The endpoint is now a merge: an absent field is left alone and an explicit `null` clears it.
+- **RP-initiated logout echoes `state`**, and `POST /logout` reads form-encoded parameters. `oidc-client-ts`'s `signoutRedirectCallback()` validates `state` and previously failed against dev-oidc.
+- **`refreshTokenTtlSeconds` is applied when a refresh token is issued.** It was captured at startup, so editing it looked like a hot reload but had no effect until restart.
+- **A tenant config reload emits one `config-changed` event, not two**, and a rewrite that leaves the content unchanged emits none.
+- **Basic-auth client credentials are form-urldecoded** per RFC 6749 §2.3.1. Both encoded and raw forms are accepted, so secrets containing reserved characters work with any client.
+- **Client secrets are redacted** from `GET /admin/api/config` and the admin page's raw-config dump.
+
+### Internal
+
+- Extracted the server wiring shared by legacy and hub mode (`createBaseApp`, `buildTenantDiscovery`), removing byte-identical duplication between `src/server.ts` and `src/hub/server.ts`.
+- Removed the stale `ActiveTenantState.config` snapshot, moved path helpers to `src/shared/paths.ts` so the hub server no longer imports from the CLI layer, unified two hand-rolled promise mutexes, and replaced a sentinel-string error protocol with a typed error.
+- `/userinfo` no longer re-imports the signing JWK on every request.
+
 ## [0.5.0] - 2026-07-14
 
 ### Added

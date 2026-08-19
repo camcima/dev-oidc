@@ -154,7 +154,7 @@ describe('CodeStore expiry sweep and size cap', () => {
 });
 
 describe('consumeIf', () => {
-  it('leaves the record stored when the check rejects, then allows a valid consume', () => {
+  it('burns the code when the check rejects, so no retry can succeed', () => {
     const store = createCodeStore({ ttlMs: 60_000 });
     const code = store.issue({
       clientId: 'app',
@@ -168,9 +168,7 @@ describe('consumeIf', () => {
     const rejected = store.consumeIf(code, () => 'client_id mismatch');
     expect(rejected).toEqual({ status: 'rejected', reason: 'client_id mismatch' });
 
-    const consumed = store.consumeIf(code, () => null);
-    expect(consumed.status).toBe('consumed');
-
+    // Revoked on the failed exchange, matching production IdP behaviour.
     expect(store.consumeIf(code, () => null)).toEqual({ status: 'missing' });
   });
 
@@ -188,7 +186,9 @@ describe('consumeIf', () => {
     expect(store.consumeIf(code, () => null)).toEqual({ status: 'missing' });
   });
 
-  it('consumeRefreshIf mirrors the same semantics', () => {
+  it('keeps a refresh token alive after a rejected check, unlike a code', () => {
+    // Single-use rotation already defeats replay, and no mainstream IdP
+    // revokes a refresh token just because client_id did not match.
     const store = createCodeStore({ ttlMs: 60_000, refreshTtlMs: 60_000 });
     const token = store.issueRefresh({ clientId: 'app', profileId: 'alice', scope: 'openid' });
     expect(store.consumeRefreshIf(token, () => 'client_id mismatch').status).toBe('rejected');
@@ -204,7 +204,6 @@ describe('PendingAuthStore', () => {
       clientId: 'c1',
       redirectUri: 'http://localhost/cb',
       codeChallenge: 'xyz',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
@@ -220,7 +219,6 @@ describe('PendingAuthStore', () => {
       clientId: 'c1',
       redirectUri: 'http://localhost/cb',
       codeChallenge: 'xyz',
-      codeChallengeMethod: 'S256',
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
