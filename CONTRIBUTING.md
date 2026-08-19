@@ -41,7 +41,7 @@ Conventional Commits (`feat:`, `fix:`, `docs:`, `test:`, `chore:`). Examples:
 
 - Keep PRs focused. If you're changing multiple unrelated things, split into separate PRs.
 - Include tests for new behavior.
-- Update `CHANGELOG.md` under `## Unreleased` with a one-line summary.
+- `CHANGELOG.md` sections for released versions are generated at release time from Conventional Commit subjects, so a well-written commit message is the changelog entry. Hand-written notes are still welcome and are never rewritten: the generator only prepends the new section below the file's header, leaving every existing entry untouched.
 - Don't bump the version in PRs — release tagging happens in the release workflow.
 
 ## Local development with Docker
