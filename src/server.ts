@@ -1,12 +1,9 @@
-import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { stripTrailingSlash } from '@/hub/issuer.js';
+import { configuredOrigins } from '@/server/cors.js';
+import { buildTenantDiscovery, createBaseApp } from '@/server/base.js';
 import path from 'node:path';
-import type { RequestListener, Server as HttpServer } from 'node:http';
-import type { TLSSocket } from 'node:tls';
-import httpolyglot from '@httptoolkit/httpolyglot';
-import cors from '@fastify/cors';
-import formbody from '@fastify/formbody';
 import { createEventsEmitter, registerEventsRoute, type EventsEmitter } from '@/admin/events.js';
-import { buildAdminAllowedHosts, registerAdminGuard } from '@/admin/guard.js';
 import { renderAdminPage } from '@/admin/page.js';
 import { registerProfilesRoutes } from '@/admin/profiles-routes.js';
 import type { Config } from '@/config/schema.js';
@@ -15,7 +12,6 @@ import { watchConfig, type ConfigWatcher } from '@/config/watcher.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { registerAuthorize } from '@/oidc/authorize.js';
 import { registerComplete } from '@/oidc/complete.js';
-import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { createCodeStore, DEFAULT_CODE_TTL_MS } from '@/oidc/codes.js';
@@ -24,8 +20,6 @@ import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { registerUserInfo } from '@/oidc/userinfo.js';
 import { renderIndexPage } from '@/index/page.js';
-import { pickRedirectHost, stripTrailingSlash } from '@/hub/issuer.js';
-import { configuredOrigins, createCorsOriginDelegate } from '@/server/cors.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CreateServerOptions {
@@ -116,72 +110,18 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
 
   const getTenant = (_req: FastifyRequest): ActiveTenantState => tenant;
 
-  const tlsMaterial = options.tls;
-  // httpolyglot.createServer returns a net.Server that proxies HTTP/HTTPS/HTTP2
-  // requests through the same handler. Fastify's serverFactory expects an
-  // http.Server-shaped value; the multiplexer is structurally compatible at
-  // runtime (it forwards request/response events), so we narrow with a cast and
-  // pin Fastify's RawServer generic to http.Server to match.
-  const app = Fastify<HttpServer>({
-    loggerInstance: logger,
-    ...(tlsMaterial && {
-      serverFactory: (handler: RequestListener): HttpServer =>
-        httpolyglot.createServer(
-          { tls: { cert: tlsMaterial.cert, key: tlsMaterial.key } },
-          handler,
-        ) as unknown as HttpServer,
-    }),
+  const listenHost = options.listenHost ?? '127.0.0.1';
+  const listenPort = options.listenPort ?? 8095;
+  const app = await createBaseApp({
+    logger,
+    listenHost,
+    listenPort,
+    publicUrl: options.publicUrl,
+    tls: options.tls,
+    corsOrigins: () => configuredOrigins([runtime.get()], options.publicUrl ?? tenant.issuer),
   });
 
-  if (tlsMaterial) {
-    const listenHost = options.listenHost ?? '127.0.0.1';
-    const listenPort = options.listenPort ?? 8095;
-    app.addHook('onRequest', async (req, reply) => {
-      const socket = req.socket as TLSSocket;
-      if (!socket.encrypted) {
-        // Don't echo arbitrary Host headers — `pickRedirectHost` validates
-        // against an allowlist (publicUrl host, listen host:port) before
-        // accepting `req.host`, falling back to a value dev-oidc owns.
-        const host = pickRedirectHost({
-          requestHost: req.host,
-          publicUrl: options.publicUrl,
-          listenHost,
-          listenPort,
-        });
-        const target = `https://${host}${req.url}`;
-        await reply.code(308).header('Location', target).send();
-      }
-    });
-  }
-
-  registerAdminGuard(app, {
-    allowedHosts: buildAdminAllowedHosts({
-      listenHost: options.listenHost ?? '127.0.0.1',
-      listenPort: options.listenPort ?? 8095,
-      publicUrl: options.publicUrl,
-    }),
-  });
-  await app.register(cors, {
-    origin: createCorsOriginDelegate(() =>
-      configuredOrigins([runtime.get()], options.publicUrl ?? tenant.issuer),
-    ),
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  });
-  await app.register(formbody);
-
-  app.get('/.well-known/openid-configuration', async () => {
-    const cfg = runtime.get();
-    const hasSecretClient = cfg.clients.some((c) => c.clientSecret !== undefined);
-    const authMethods: ('none' | 'client_secret_post' | 'client_secret_basic')[] = hasSecretClient
-      ? ['none', 'client_secret_post', 'client_secret_basic']
-      : ['none'];
-    return buildDiscoveryDocument({
-      issuer: tenant.issuer,
-      signingAlg: keyMaterial.alg,
-      authMethods,
-      subjectClaim: cfg.subjectClaim,
-    });
-  });
+  app.get('/.well-known/openid-configuration', async () => buildTenantDiscovery(tenant));
 
   app.get('/.well-known/jwks.json', async () => jwksDocument);
 
