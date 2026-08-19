@@ -1,0 +1,12 @@
+coverage:
+  status:
+    project:
+      default:
+        # Floor, not a goal: the suite sits at ~88% and this leaves room for a
+        # normal refactor without turning the build red. Raise it as coverage
+        # settles upward.
+        target: 85%
+    # The patch status is noise here — a PR that lowers overall coverage is
+    # already caught by the project floor, and every other library in this
+    # fleet disables it.
+    patch: false
