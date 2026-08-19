@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: 'weekly'
     open-pull-requests-limit: 10
+    ignore:
+      # typescript-eslint has no stable release supporting TypeScript 7 yet
+      # (peer range is still `>=4.8.4 <6.1.0` as of typescript-eslint 8.67.0).
+      # Grouping a TS major in breaks `npm ci` with ERESOLVE, so hold it back
+      # until typescript-eslint ships TS 7 support, then bump both together.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
     groups:
       production-dependencies:
         dependency-type: 'production'
