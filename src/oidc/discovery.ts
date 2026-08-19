@@ -7,6 +7,7 @@ export interface DiscoveryDocument {
   userinfo_endpoint: string;
   claims_supported: readonly string[];
   response_types_supported: readonly string[];
+  response_modes_supported: readonly string[];
   grant_types_supported: readonly string[];
   subject_types_supported: readonly string[];
   code_challenge_methods_supported: readonly string[];
@@ -59,7 +60,8 @@ export function buildDiscoveryDocument(input: DiscoveryInput): DiscoveryDocument
     userinfo_endpoint: `${issuer}/userinfo`,
     claims_supported: claimsSupported,
     response_types_supported: ['code'],
-    grant_types_supported: ['authorization_code', 'refresh_token'],
+    response_modes_supported: ['query'],
+    grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
     subject_types_supported: ['public'],
     code_challenge_methods_supported: ['S256'],
     id_token_signing_alg_values_supported: [input.signingAlg],

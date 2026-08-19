@@ -17,6 +17,12 @@ const ClientSchema = z.object({
   // Opt-in scope policy. Absent = passthrough (the default; scopes are test
   // data, not authorization grants). 'openid' is always implicitly allowed.
   allowedScopes: z.array(z.string().min(1)).optional(),
+  // Whether /authorize demands PKCE. Absent means "public clients yes,
+  // confidential clients no", matching Entra and Auth0 — server-side clients
+  // (Spring Security, older Passport strategies) commonly omit PKCE, and
+  // hard-requiring it turned their first redirect into a 400. A supplied
+  // code_challenge is always verified regardless of this setting.
+  requirePkce: z.boolean().optional(),
 });
 
 const BrandingInner = z.object({

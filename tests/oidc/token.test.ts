@@ -334,7 +334,7 @@ describe('POST /token (unsupported grants)', () => {
       url: '/token',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       payload: new URLSearchParams({
-        grant_type: 'client_credentials',
+        grant_type: 'password',
         client_id: 'my-app',
       }).toString(),
     });
@@ -486,7 +486,7 @@ describe('POST /token (ID-token fidelity claims)', () => {
   });
 });
 
-describe('POST /token does not consume credentials on invalid exchanges', () => {
+describe('POST /token credential lifetime after an invalid exchange', () => {
   const verifier = 'verifier-0123456789abcdef0123456789abcdef';
 
   function issueCode(codes: CodeStore): string {
@@ -520,7 +520,7 @@ describe('POST /token does not consume credentials on invalid exchanges', () => 
     redirect_uri: 'http://localhost:5173/auth/callback',
   });
 
-  it('a wrong PKCE verifier is rejected but the code survives for a valid retry', async () => {
+  it('a wrong PKCE verifier is rejected and revokes the code', async () => {
     const { app, codes } = await buildApp();
     const code = issueCode(codes);
 
@@ -531,12 +531,13 @@ describe('POST /token does not consume credentials on invalid exchanges', () => 
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error_description).toBe('PKCE verifier mismatch');
 
-    const good = await exchange(app, validParams(code));
-    expect(good.statusCode).toBe(200);
+    const retry = await exchange(app, validParams(code));
+    expect(retry.statusCode).toBe(400);
+    expect(retry.json().error).toBe('invalid_grant');
     await app.close();
   });
 
-  it('a wrong redirect_uri is rejected but the code survives', async () => {
+  it('a wrong redirect_uri is rejected and revokes the code', async () => {
     const { app, codes } = await buildApp();
     const code = issueCode(codes);
 
@@ -547,8 +548,8 @@ describe('POST /token does not consume credentials on invalid exchanges', () => 
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error_description).toBe('redirect_uri mismatch');
 
-    const good = await exchange(app, validParams(code));
-    expect(good.statusCode).toBe(200);
+    const retry = await exchange(app, validParams(code));
+    expect(retry.statusCode).toBe(400);
     await app.close();
   });
 

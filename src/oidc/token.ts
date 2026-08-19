@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
-import type { Profile } from '@/config/schema.js';
+import type { Client, Profile } from '@/config/schema.js';
 import { assembleClaims } from '@/oidc/claims.js';
 
 export interface TokenDeps {
@@ -12,6 +12,7 @@ export interface TokenDeps {
 
 interface TokenBody {
   grant_type?: string;
+  scope?: string;
   code?: string;
   code_verifier?: string;
   redirect_uri?: string;
@@ -26,8 +27,30 @@ function s256(input: string): string {
 
 interface ExtractedCreds {
   clientId?: string;
-  secret?: string;
+  /**
+   * Candidate secrets to test. RFC 6749 §2.3.1 says Basic-auth credentials are
+   * form-urlencoded before base64, and spec-conformant clients encode them —
+   * but plenty of tools send the raw bytes. Both readings are offered so a
+   * secret containing reserved characters works either way; each is compared
+   * against the configured value, so accepting two candidates leaks nothing.
+   */
+  secrets: string[];
   conflict?: boolean;
+}
+
+/** Form-urlencoded decode; returns null when the input is not valid encoding. */
+function formUrlDecode(value: string): string | null {
+  try {
+    return decodeURIComponent(value.replace(/\+/g, ' '));
+  } catch {
+    return null;
+  }
+}
+
+function candidates(raw: string | undefined): string[] {
+  if (raw === undefined) return [];
+  const decoded = formUrlDecode(raw);
+  return decoded !== null && decoded !== raw ? [raw, decoded] : [raw];
 }
 
 function extractClientCredentials(request: FastifyRequest, body: TokenBody): ExtractedCreds {
@@ -46,10 +69,20 @@ function extractClientCredentials(request: FastifyRequest, body: TokenBody): Ext
   const formId = body.client_id;
   const formSecret = body.client_secret;
 
-  if (basicId && formId && basicId !== formId) return { conflict: true };
-  if (basicSecret && formSecret && basicSecret !== formSecret) return { conflict: true };
+  // Compare ids after decoding so an encoded header and a raw body field for
+  // the same client are not mistaken for a conflict.
+  const basicIdDecoded = basicId === undefined ? undefined : (formUrlDecode(basicId) ?? basicId);
+  if (basicId && formId && basicId !== formId && basicIdDecoded !== formId) {
+    return { conflict: true, secrets: [] };
+  }
+  if (basicSecret && formSecret && !candidates(basicSecret).includes(formSecret)) {
+    return { conflict: true, secrets: [] };
+  }
 
-  return { clientId: basicId ?? formId, secret: basicSecret ?? formSecret };
+  return {
+    clientId: basicIdDecoded ?? formId,
+    secrets: basicSecret !== undefined ? candidates(basicSecret) : candidates(formSecret),
+  };
 }
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -57,6 +90,14 @@ function constantTimeEqual(a: string, b: string): boolean {
   const bb = Buffer.from(b, 'utf8');
   if (ab.length !== bb.length) return false;
   return timingSafeEqual(ab, bb);
+}
+
+function secretMatches(expected: string, offered: string[]): boolean {
+  let ok = false;
+  for (const candidate of offered) {
+    if (constantTimeEqual(expected, candidate)) ok = true;
+  }
+  return ok;
 }
 
 export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
@@ -88,7 +129,7 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
     }
 
     if (client.clientSecret) {
-      if (!creds.secret || !constantTimeEqual(client.clientSecret, creds.secret)) {
+      if (!secretMatches(client.clientSecret, creds.secrets)) {
         return reply
           .code(401)
           .header('www-authenticate', 'Basic realm="dev-oidc"')
@@ -105,6 +146,8 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
         return handleCodeGrant(tenant, body, reply);
       case 'refresh_token':
         return handleRefreshGrant(tenant, body, reply);
+      case 'client_credentials':
+        return handleClientCredentialsGrant(tenant, client, body, reply);
       default:
         return reply.code(400).send({ error: 'unsupported_grant_type' });
     }
@@ -120,7 +163,7 @@ async function handleCodeGrant(
   const verifier = body.code_verifier;
   const clientId = body.client_id;
   const redirectUri = body.redirect_uri;
-  if (!code || !verifier || !clientId || !redirectUri) {
+  if (!code || !clientId || !redirectUri) {
     return reply
       .code(400)
       .send({ error: 'invalid_request', error_description: 'missing required fields' });
@@ -128,7 +171,12 @@ async function handleCodeGrant(
 
   const result = tenant.codes.consumeIf(code, (record) => {
     if (record.clientId !== clientId) return 'client_id mismatch';
-    if (s256(verifier) !== record.codeChallenge) return 'PKCE verifier mismatch';
+    // PKCE is verified whenever the authorization request supplied a
+    // challenge, whether or not the client was obliged to send one.
+    if (record.codeChallenge !== undefined) {
+      if (!verifier) return 'code_verifier is required for this authorization code';
+      if (s256(verifier) !== record.codeChallenge) return 'PKCE verifier mismatch';
+    }
     if (redirectUri !== record.redirectUri) return 'redirect_uri mismatch';
     return null;
   });
@@ -189,6 +237,59 @@ async function handleRefreshGrant(
   }
 
   return issueTokenSet(tenant, profile, record.clientId, '', record.scope, record.authTime, reply);
+}
+
+/**
+ * RFC 6749 §4.4 machine-to-machine grant: no user, so no id_token and no
+ * refresh token (§4.4.3), and `openid` is not required. Only confidential
+ * clients qualify — a public client has nothing to authenticate with.
+ */
+async function handleClientCredentialsGrant(
+  tenant: ActiveTenantState,
+  client: Client,
+  body: TokenBody,
+  reply: FastifyReply,
+): Promise<unknown> {
+  if (!client.clientSecret) {
+    return reply.code(400).send({
+      error: 'unauthorized_client',
+      error_description: 'client_credentials requires a client with a clientSecret',
+    });
+  }
+
+  const scope = body.scope ?? '';
+  const scopeTokens = scope.split(/\s+/).filter(Boolean);
+  if (client.allowedScopes) {
+    const allowed = new Set(client.allowedScopes);
+    const denied = scopeTokens.filter((s) => !allowed.has(s));
+    if (denied.length > 0) {
+      return reply.code(400).send({
+        error: 'invalid_scope',
+        error_description: `scope not allowed for this client: ${denied.join(' ')}`,
+      });
+    }
+  }
+
+  const config = tenant.runtime.get();
+  const accessToken = await new jose.SignJWT({ scope, client_id: client.clientId })
+    .setProtectedHeader({
+      alg: tenant.keyMaterial.alg,
+      kid: tenant.keyMaterial.kid,
+      typ: 'JWT',
+    })
+    .setIssuer(tenant.issuer)
+    .setAudience(client.audience)
+    .setSubject(client.clientId)
+    .setIssuedAt()
+    .setExpirationTime(`${config.tokenTtlSeconds}s`)
+    .sign(tenant.keyMaterial.privateKey);
+
+  return reply.code(200).send({
+    access_token: accessToken,
+    token_type: 'Bearer',
+    expires_in: config.tokenTtlSeconds,
+    scope,
+  });
 }
 
 async function issueTokenSet(

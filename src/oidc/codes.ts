@@ -7,7 +7,8 @@ export const DEFAULT_CODE_TTL_MS = 60_000;
 export interface CodeRecord {
   clientId: string;
   profileId: string;
-  codeChallenge: string;
+  /** Absent when the authorization request carried no PKCE challenge. */
+  codeChallenge?: string;
   nonce: string;
   redirectUri: string;
   scope: string;
@@ -68,6 +69,7 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
     map: Map<string, Entry<T>>,
     key: string,
     check: (record: T) => string | null,
+    burnOnReject: boolean,
   ): ConsumeResult<T> {
     const entry = map.get(key);
     if (!entry) return { status: 'missing' };
@@ -76,7 +78,10 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return { status: 'missing' };
     }
     const reason = check(entry.value);
-    if (reason !== null) return { status: 'rejected', reason };
+    if (reason !== null) {
+      if (burnOnReject) map.delete(key);
+      return { status: 'rejected', reason };
+    }
     map.delete(key);
     return { status: 'consumed', record: entry.value };
   }
@@ -89,11 +94,14 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return code;
     },
     consume(code) {
-      const result = consumeFrom(codes, code, () => null);
+      const result = consumeFrom(codes, code, () => null, true);
       return result.status === 'consumed' ? result.record : null;
     },
     consumeIf(code, check) {
-      return consumeFrom(codes, code, check);
+      // A failed exchange revokes the code: RFC 6749 §4.1.2 has the AS do so,
+      // and real IdPs do. Leaving it live let a client with a wrong verifier
+      // or redirect_uri succeed on retry in dev while failing in production.
+      return consumeFrom(codes, code, check, true);
     },
     issueRefresh(record) {
       evictForInsert(refresh, maxEntries);
@@ -102,11 +110,14 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
       return token;
     },
     consumeRefresh(token) {
-      const result = consumeFrom(refresh, token, () => null);
+      const result = consumeFrom(refresh, token, () => null, false);
       return result.status === 'consumed' ? result.record : null;
     },
     consumeRefreshIf(token, check) {
-      return consumeFrom(refresh, token, check);
+      // Unlike codes, a refresh token survives a failed check. Single-use
+      // rotation already makes replay fail on its own, and no mainstream IdP
+      // revokes a refresh token merely because client_id did not match.
+      return consumeFrom(refresh, token, check, false);
     },
     size() {
       return codes.size + refresh.size;

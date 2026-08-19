@@ -7,8 +7,8 @@ export const DEFAULT_PENDING_TTL_MS = 10 * 60_000;
 export interface PendingAuth {
   clientId: string;
   redirectUri: string;
-  codeChallenge: string;
-  codeChallengeMethod: 'S256';
+  /** Absent when the client is allowed to skip PKCE. Always S256 when set. */
+  codeChallenge?: string;
   nonce: string;
   state: string;
   scope: string;
