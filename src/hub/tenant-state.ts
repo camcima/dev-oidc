@@ -1,4 +1,3 @@
-import type { Config } from '@/config/schema.js';
 import type { RuntimeConfig } from '@/config/runtime.js';
 import type { KeyMaterial } from '@/oidc/keys.js';
 import type { CodeStore } from '@/oidc/codes.js';
@@ -12,7 +11,11 @@ export interface ActiveTenantState {
   slug: string;
   configPath: string;
   status: 'active';
-  config: Config;
+  /**
+   * Live view of the tenant's config. There is deliberately no snapshot field
+   * beside it: one existed, went stale on every hot reload, and had no readers
+   * — but sat next to `runtime` inviting the next contributor to use it.
+   */
   runtime: RuntimeConfig;
   keyMaterial: KeyMaterial;
   jwks: JwksDocument;

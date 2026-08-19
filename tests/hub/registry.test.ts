@@ -42,7 +42,7 @@ describe('TenantRegistry', () => {
     expect(tenant?.slug).toBe('app');
     if (tenant?.status === 'active') {
       expect(tenant.issuer).toBe('http://localhost:8095/app');
-      expect(tenant.config.clients[0]!.clientId).toBe('my-app');
+      expect(tenant.runtime.get().clients[0]!.clientId).toBe('my-app');
     }
   });
 

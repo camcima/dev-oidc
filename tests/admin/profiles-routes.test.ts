@@ -45,7 +45,7 @@ async function buildApp() {
   const config = baseConfig();
   const runtime = createRuntimeConfig(config);
   const app = Fastify();
-  const tenant = buildActiveTenant({ config, runtime, configPath: file });
+  const tenant = buildActiveTenant({ runtime, configPath: file });
   registerProfilesRoutes(app, { getTenant: () => tenant });
   return { app, runtime, file };
 }
@@ -269,6 +269,31 @@ describe('concurrent profile mutations', () => {
     const ids = runtime.get().profiles.map((p) => p.id);
     expect(ids).toContain('carol');
     expect(ids).toContain('dave');
+    await app.close();
+  });
+});
+
+describe('admin surfaces do not echo client secrets', () => {
+  it('redacts clientSecret from GET /admin/api/config', async () => {
+    const dir = makeTmpDir('dev-oidc-secret-');
+    const file = path.join(dir, 'config.json');
+    const withSecret: Config = {
+      ...baseConfig(),
+      clients: [{ ...baseConfig().clients[0]!, clientSecret: 'super-secret-value' }],
+    };
+    writeFileSync(file, JSON.stringify(withSecret, null, 2));
+    const runtime = createRuntimeConfig(withSecret);
+    const app = Fastify();
+    const tenant = buildActiveTenant({ runtime, configPath: file });
+    registerProfilesRoutes(app, { getTenant: () => tenant });
+
+    const res = await app.inject({ method: 'GET', url: '/admin/api/config' });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).not.toContain('super-secret-value');
+    expect((res.json() as Config).clients[0]!.clientSecret).toBeDefined();
+
+    // The redaction must not corrupt what is persisted on disk.
+    expect(readFileSync(file, 'utf8')).toContain('super-secret-value');
     await app.close();
   });
 });

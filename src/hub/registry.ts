@@ -11,6 +11,7 @@ import type { HubTenantEntry } from '@/hub/schema.js';
 import type { ActiveTenantState, TenantState } from '@/hub/tenant-state.js';
 import { computeIssuer } from '@/hub/issuer.js';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
+import { createKeyedMutex } from '@/shared/keyed-mutex.js';
 
 export type TenantRegistryEventMap = {
   added: { slug: string };
@@ -60,17 +61,9 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
   // Per-slug mutex: serializes add/remove for the same slug so concurrent
   // reconcile invocations or competing CLI mutations cannot interleave the
   // load → activate → swap → deactivate sequence.
-  const slugLocks = new Map<string, Promise<unknown>>();
-
-  function withSlugLock<T>(slug: string, fn: () => Promise<T>): Promise<T> {
-    const prev = slugLocks.get(slug) ?? Promise.resolve();
-    const result = prev.then(fn, fn);
-    slugLocks.set(
-      slug,
-      result.catch(() => undefined),
-    );
-    return result;
-  }
+  const slugMutex = createKeyedMutex();
+  const withSlugLock = <T>(slug: string, fn: () => Promise<T>): Promise<T> =>
+    slugMutex.run(slug, fn);
 
   async function activate(entry: HubTenantEntry): Promise<TenantState> {
     const configDir = path.dirname(entry.configPath);
@@ -137,7 +130,6 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
       slug: entry.slug,
       configPath: entry.configPath,
       status: 'active',
-      config,
       runtime,
       keyMaterial,
       jwks,
@@ -174,7 +166,9 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         if (previous) {
           await deactivate(previous);
         }
-        events.emit('added', { slug: entry.slug });
+        // `added` means "this slug is new". Re-activating an existing slug is
+        // a replacement, which consumers should not read as a fresh mount.
+        if (!previous) events.emit('added', { slug: entry.slug });
         events.emit('statusChanged', { slug: entry.slug, status: state.status });
       });
     },

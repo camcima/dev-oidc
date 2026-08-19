@@ -187,7 +187,6 @@ async function runStart(
 
   // Hub mode
   const { createHubServer } = await import('@/hub/server.js');
-  const { defaultHubConfigPath } = await import('@/hub/loader.js');
   const hubConfigPath =
     typeof values['hub-config'] === 'string' ? values['hub-config'] : defaultHubConfigPath();
   const server = await createHubServer({ hubConfigPath, logger });

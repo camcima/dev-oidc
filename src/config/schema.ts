@@ -35,7 +35,7 @@ const BrandingSchema = BrandingInner.default(BrandingInner.parse({}));
 const ProfileSchema = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
-  email: z.string().email(),
+  email: z.email(),
   avatar: httpUrl().nullable().default(null),
   emailVerified: z.boolean().optional(),
   givenName: z.string().min(1).optional(),
@@ -66,106 +66,117 @@ const ConfigBodySchema = z.object({
 
 const KNOWN_KEYS = new Set(Object.keys(ConfigBodySchema.shape));
 
-export const ConfigSchema = ConfigBodySchema.passthrough().superRefine((value, ctx) => {
-  const raw = value as Record<string, unknown>;
+export type Config = z.infer<typeof ConfigBodySchema>;
 
-  // Tailored error messages for fields that USED to live here in v0.1.x.
-  if ('issuer' in raw) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['issuer'],
-      message:
-        'issuer no longer belongs in project config; the Hub computes it from publicUrl + slug, or pass `--public-url` for legacy mode',
-    });
-  }
-  if ('port' in raw) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['port'],
-      message:
-        'port no longer belongs in project config; set hub.server.port in hub.json (or pass `--port` for legacy mode)',
-    });
-  }
-  if ('host' in raw) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['host'],
-      message:
-        'host no longer belongs in project config; set hub.server.host in hub.json (or pass `--host` for legacy mode)',
-    });
-  }
-  if ('tls' in raw) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['tls'],
-      message:
-        'tls no longer belongs in project config; set hub.server.tls in hub.json (or pass `--tls`/`--tls-cert` for legacy mode)',
-    });
-  }
+/**
+ * Validation entry point. It is a *loose* object so unknown keys survive
+ * parsing long enough for the refinement below to reject them by name; the
+ * refinement rejects every one, so a successful parse never actually carries
+ * extras. Declaring the exported type as `ZodType<Config>` states that
+ * directly, replacing an `as unknown as typeof ConfigBodySchema` cast that
+ * claimed this was a plain object schema when it is not.
+ */
+export const ConfigSchema: z.ZodType<Config, unknown> = z
+  .looseObject(ConfigBodySchema.shape)
+  .superRefine((value, ctx) => {
+    const raw = value as Record<string, unknown>;
 
-  // Reject any other unrecognized keys (strict-like behaviour for all other unknown fields).
-  for (const key of Object.keys(raw)) {
-    if (
-      !KNOWN_KEYS.has(key) &&
-      key !== 'issuer' &&
-      key !== 'port' &&
-      key !== 'host' &&
-      key !== 'tls'
-    ) {
-      ctx.addIssue({
-        code: 'unrecognized_keys',
-        keys: [key],
-        path: [],
-        message: `Unrecognized key: "${key}"`,
-      });
-    }
-  }
-
-  // Identity uniqueness: handlers select clients/profiles with Array.find,
-  // so a duplicate id silently shadows every later entry.
-  const seenClientIds = new Set<string>();
-  for (const [i, client] of value.clients.entries()) {
-    if (seenClientIds.has(client.clientId)) {
+    // Tailored error messages for fields that USED to live here in v0.1.x.
+    if ('issuer' in raw) {
       ctx.addIssue({
         code: 'custom',
-        path: ['clients', i, 'clientId'],
-        message: `duplicate clientId "${client.clientId}"`,
+        path: ['issuer'],
+        message:
+          'issuer no longer belongs in project config; the Hub computes it from publicUrl + slug, or pass `--public-url` for legacy mode',
       });
     }
-    seenClientIds.add(client.clientId);
+    if ('port' in raw) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['port'],
+        message:
+          'port no longer belongs in project config; set hub.server.port in hub.json (or pass `--port` for legacy mode)',
+      });
+    }
+    if ('host' in raw) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['host'],
+        message:
+          'host no longer belongs in project config; set hub.server.host in hub.json (or pass `--host` for legacy mode)',
+      });
+    }
+    if ('tls' in raw) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['tls'],
+        message:
+          'tls no longer belongs in project config; set hub.server.tls in hub.json (or pass `--tls`/`--tls-cert` for legacy mode)',
+      });
+    }
 
-    for (const [listName, uris] of [
-      ['redirectUris', client.redirectUris],
-      ['postLogoutRedirectUris', client.postLogoutRedirectUris],
-    ] as const) {
-      const seenUris = new Set<string>();
-      for (const [j, uri] of uris.entries()) {
-        if (seenUris.has(uri)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: ['clients', i, listName, j],
-            message: `duplicate ${listName} entry "${uri}"`,
-          });
-        }
-        seenUris.add(uri);
+    // Reject any other unrecognized keys (strict-like behaviour for all other unknown fields).
+    for (const key of Object.keys(raw)) {
+      if (
+        !KNOWN_KEYS.has(key) &&
+        key !== 'issuer' &&
+        key !== 'port' &&
+        key !== 'host' &&
+        key !== 'tls'
+      ) {
+        ctx.addIssue({
+          code: 'unrecognized_keys',
+          keys: [key],
+          path: [],
+          message: `Unrecognized key: "${key}"`,
+        });
       }
     }
-  }
 
-  const seenProfileIds = new Set<string>();
-  for (const [i, profile] of value.profiles.entries()) {
-    if (seenProfileIds.has(profile.id)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['profiles', i, 'id'],
-        message: `duplicate profile id "${profile.id}"`,
-      });
+    // Identity uniqueness: handlers select clients/profiles with Array.find,
+    // so a duplicate id silently shadows every later entry.
+    const seenClientIds = new Set<string>();
+    for (const [i, client] of value.clients.entries()) {
+      if (seenClientIds.has(client.clientId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['clients', i, 'clientId'],
+          message: `duplicate clientId "${client.clientId}"`,
+        });
+      }
+      seenClientIds.add(client.clientId);
+
+      for (const [listName, uris] of [
+        ['redirectUris', client.redirectUris],
+        ['postLogoutRedirectUris', client.postLogoutRedirectUris],
+      ] as const) {
+        const seenUris = new Set<string>();
+        for (const [j, uri] of uris.entries()) {
+          if (seenUris.has(uri)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['clients', i, listName, j],
+              message: `duplicate ${listName} entry "${uri}"`,
+            });
+          }
+          seenUris.add(uri);
+        }
+      }
     }
-    seenProfileIds.add(profile.id);
-  }
-}) as unknown as typeof ConfigBodySchema;
 
-export type Config = z.infer<typeof ConfigBodySchema>;
+    const seenProfileIds = new Set<string>();
+    for (const [i, profile] of value.profiles.entries()) {
+      if (seenProfileIds.has(profile.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['profiles', i, 'id'],
+          message: `duplicate profile id "${profile.id}"`,
+        });
+      }
+      seenProfileIds.add(profile.id);
+    }
+  });
+
 export type Client = z.infer<typeof ClientSchema>;
 export type Profile = z.infer<typeof ProfileSchema>;
 export type SigningKey = z.infer<typeof SigningKeySchema>;

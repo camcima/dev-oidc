@@ -56,7 +56,7 @@ async function buildApp() {
   const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
   const app = Fastify();
   await app.register(formbody);
-  const tenant = buildActiveTenant({ config, runtime, codes, keyMaterial });
+  const tenant = buildActiveTenant({ runtime, codes, keyMaterial });
   registerToken(app, { getTenant: () => tenant });
   return { app, runtime, codes, keyMaterial };
 }
@@ -379,7 +379,7 @@ async function buildAppWithSecret() {
   const keyMaterial = await createKeyMaterial(runtime.get().signingKey);
   const app = Fastify();
   await app.register(formbody);
-  const tenant = buildActiveTenant({ config, runtime, codes, keyMaterial });
+  const tenant = buildActiveTenant({ runtime, codes, keyMaterial });
   registerToken(app, { getTenant: () => tenant });
   return { app, codes };
 }

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { withConfigLock } from '@/config/mutex.js';
 import { writeConfigFile } from '@/config/writer.js';
-import type { Profile } from '@/config/schema.js';
+import type { Config, Profile } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { httpUrl } from '@/shared/url-schema.js';
 
@@ -77,12 +77,29 @@ function mergeProfile(existing: Profile, patch: z.infer<typeof ProfilePatch>): P
   return next;
 }
 
+export const REDACTED = '[redacted]';
+
+/**
+ * Client secrets are never echoed by the admin surfaces. The placeholder is
+ * kept (rather than dropping the key) so a reader can still tell which clients
+ * are confidential. Only the response is masked; what is persisted on disk and
+ * used for client authentication is untouched.
+ */
+export function redactSecrets(config: Config): Config {
+  return {
+    ...config,
+    clients: config.clients.map((client) =>
+      client.clientSecret === undefined ? client : { ...client, clientSecret: REDACTED },
+    ),
+  };
+}
+
 export function registerProfilesRoutes(app: FastifyInstance, deps: ProfilesRoutesDeps): void {
   const prefix = deps.pathPrefix ?? '/admin/api';
 
   app.get(`${prefix}/config`, async (request) => {
     const tenant = deps.getTenant(request);
-    return tenant.runtime.get();
+    return redactSecrets(tenant.runtime.get());
   });
 
   app.get(`${prefix}/profiles`, async (request) => {

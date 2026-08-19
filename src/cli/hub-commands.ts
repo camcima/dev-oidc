@@ -27,6 +27,19 @@ async function resolveProjectConfigPath(arg: string): Promise<string> {
   return abs;
 }
 
+/**
+ * Aborts a mutateHubConfig transaction with a message for the user. Replaces a
+ * sentinel-string protocol (`throw new Error('__slug_conflict__')` matched in
+ * the catch) that misread any nested error carrying the same text and relied
+ * on out-of-band mutable captures to carry its detail.
+ */
+class HubMutationAbort extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'HubMutationAbort';
+  }
+}
+
 export interface CommandResult {
   exitCode: 0 | 1 | 2;
   stdout?: string;
@@ -72,20 +85,19 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
     return { exitCode: 1, stderr: `dev-oidc: slug "${slug}" is reserved\n` };
   }
 
-  let conflictPath: string | null = null;
-  let conflictSlug: string | null = null;
   try {
     await mutateHubConfig(options.hubConfigPath, (hub) => {
       const existing = hub.tenants.find((t) => t.slug === slug);
       if (existing) {
-        conflictPath = existing.configPath;
-        // Throw a sentinel to abort the mutation; we surface the message below.
-        throw new Error('__slug_conflict__');
+        throw new HubMutationAbort(
+          `slug "${slug}" already registered to ${existing.configPath}; use a different --slug or run \`dev-oidc unregister ${slug}\` first`,
+        );
       }
       const pathOwner = hub.tenants.find((t) => t.configPath === absConfig);
       if (pathOwner) {
-        conflictSlug = pathOwner.slug;
-        throw new Error('__configpath_conflict__');
+        throw new HubMutationAbort(
+          `config ${absConfig} is already registered to slug "${pathOwner.slug}"; unregister it first or use a separate config file`,
+        );
       }
       return {
         ...hub,
@@ -93,17 +105,8 @@ export async function runRegister(options: RegisterOptions): Promise<CommandResu
       };
     });
   } catch (err) {
-    if (err instanceof Error && err.message === '__slug_conflict__' && conflictPath) {
-      return {
-        exitCode: 1,
-        stderr: `dev-oidc: slug "${slug}" already registered to ${conflictPath}; use a different --slug or run \`dev-oidc unregister ${slug}\` first\n`,
-      };
-    }
-    if (err instanceof Error && err.message === '__configpath_conflict__' && conflictSlug) {
-      return {
-        exitCode: 1,
-        stderr: `dev-oidc: config ${absConfig} is already registered to slug "${conflictSlug}"; unregister it first or use a separate config file\n`,
-      };
+    if (err instanceof HubMutationAbort) {
+      return { exitCode: 1, stderr: `dev-oidc: ${err.message}\n` };
     }
     // Lockfile timeouts, fs permission errors, malformed hub.json on read, etc.
     // Map to exitCode=2 (system error) so the CLI exits cleanly with a clear
@@ -130,19 +133,19 @@ export async function runUnregister(options: UnregisterOptions): Promise<Command
       stderr: `dev-oidc: invalid slug shape; expected ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$\n`,
     };
   }
-  let removedConfigPath: string | null = null;
+  let removedConfigPath = '';
   try {
     await mutateHubConfig(options.hubConfigPath, (hub) => {
       const existing = hub.tenants.find((t) => t.slug === options.slug);
       if (!existing) {
-        throw new Error('__unknown_slug__');
+        throw new HubMutationAbort(`unknown slug "${options.slug}"`);
       }
       removedConfigPath = existing.configPath;
       return { ...hub, tenants: hub.tenants.filter((t) => t.slug !== options.slug) };
     });
   } catch (err) {
-    if (err instanceof Error && err.message === '__unknown_slug__') {
-      return { exitCode: 1, stderr: `dev-oidc: unknown slug "${options.slug}"\n` };
+    if (err instanceof HubMutationAbort) {
+      return { exitCode: 1, stderr: `dev-oidc: ${err.message}\n` };
     }
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -152,7 +155,7 @@ export async function runUnregister(options: UnregisterOptions): Promise<Command
   }
   return {
     exitCode: 0,
-    stdout: `Unregistered "${options.slug}" → ${removedConfigPath!}\n`,
+    stdout: `Unregistered "${options.slug}" → ${removedConfigPath}\n`,
   };
 }
 

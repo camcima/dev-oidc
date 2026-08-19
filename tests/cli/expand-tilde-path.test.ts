@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { expandTildePath } from '@/cli/legacy.js';
+import { expandTildePath } from '@/shared/paths.js';
 
 describe('expandTildePath', () => {
   it('expands a leading ~/ to the user home directory', () => {

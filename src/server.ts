@@ -25,6 +25,7 @@ import { registerLogout } from '@/oidc/logout.js';
 import { registerUserInfo } from '@/oidc/userinfo.js';
 import { renderIndexPage } from '@/index/page.js';
 import { pickRedirectHost, stripTrailingSlash } from '@/hub/issuer.js';
+import { configuredOrigins, createCorsOriginDelegate } from '@/server/cors.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 
 export interface CreateServerOptions {
@@ -104,7 +105,6 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     slug: '(legacy)',
     configPath: options.configFilePath ?? '',
     status: 'active',
-    config: options.config,
     runtime,
     keyMaterial,
     jwks: jwksDocument,
@@ -162,7 +162,9 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
     }),
   });
   await app.register(cors, {
-    origin: true,
+    origin: createCorsOriginDelegate(() =>
+      configuredOrigins([runtime.get()], options.publicUrl ?? tenant.issuer),
+    ),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
   await app.register(formbody);

@@ -36,7 +36,6 @@ async function buildApp() {
     status: 'active',
     issuer: 'http://localhost:8095',
     watcher: null,
-    config,
     runtime,
   } as unknown as ActiveTenantState;
   registerLogout(app, { getTenant: () => tenant });

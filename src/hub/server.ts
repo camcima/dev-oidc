@@ -1,16 +1,16 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import path from 'node:path';
-import os from 'node:os';
 import type { RequestListener, Server as HttpServer } from 'node:http';
 import type { TLSSocket } from 'node:tls';
 import httpolyglot from '@httptoolkit/httpolyglot';
 import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import { createLogger, type DevOidcLogger } from '@/logger.js';
-import { expandTildePath } from '@/cli/legacy.js';
+import { defaultCertCacheDir, defaultTlsHostnames, expandTildePath } from '@/shared/paths.js';
 import { loadHubConfig } from '@/hub/loader.js';
 import { watchHubConfig, type HubConfigWatcher } from '@/hub/watcher.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
+import { configuredOrigins, createCorsOriginDelegate } from '@/server/cors.js';
 import { createTenantRegistry, type TenantRegistry } from '@/hub/registry.js';
 import {
   deriveDefaultPublicUrl,
@@ -57,25 +57,6 @@ function resolveTenant(
   if (!tenant) return { kind: 'not-found' };
   if (tenant.status === 'error') return { kind: 'error', tenant };
   return { kind: 'ok', tenant };
-}
-
-function defaultCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME;
-  const root = xdg && xdg.trim().length > 0 ? xdg : path.join(os.homedir(), '.cache');
-  return path.join(root, 'dev-oidc', 'certs');
-}
-
-function defaultHostnames(host: string, publicUrl?: string): string[] {
-  const set = new Set<string>([host, 'localhost']);
-  if (publicUrl) {
-    try {
-      const u = new URL(publicUrl);
-      if (u.hostname) set.add(u.hostname);
-    } catch {
-      // ignore
-    }
-  }
-  return [...set];
 }
 
 function toDashboardTenant(t: TenantState): DashboardTenant {
@@ -142,8 +123,8 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
         : { hostnames: tls.hostnames };
     tlsMaterial = await loadTlsMaterial({
       config: tlsConfig,
-      cacheDir: defaultCacheDir(),
-      defaultHostnames: defaultHostnames(hubConfig.server.host, configPublicUrl),
+      cacheDir: defaultCertCacheDir(),
+      defaultHostnames: defaultTlsHostnames(hubConfig.server.host, configPublicUrl),
     });
     logger.info({ caroot: process.env.CAROOT ?? '(default)' }, 'TLS enabled for hub mode');
   }
@@ -211,7 +192,15 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
     }),
   });
   await app.register(cors, {
-    origin: true,
+    origin: createCorsOriginDelegate(() =>
+      configuredOrigins(
+        registry
+          .list()
+          .filter((t) => t.status === 'active')
+          .map((t) => t.runtime.get()),
+        publicUrl,
+      ),
+    ),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
   await app.register(formbody);
@@ -284,6 +273,10 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
   registry.events.on('profilesChanged', forwardConfigChange);
   registry.events.on('added', forwardConfigChange);
   registry.events.on('removed', forwardConfigChange);
+  // statusChanged covers the two cases the others miss: a tenant replaced in
+  // place (same slug, new configPath) and one flipping between active and
+  // error. Without it the dashboard would keep showing stale rows.
+  registry.events.on('statusChanged', forwardConfigChange);
 
   // Admin dashboard.
   app.get('/admin', async (_req, reply) => {

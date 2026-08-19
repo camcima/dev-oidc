@@ -1,4 +1,5 @@
 import type { Config, Profile } from '@/config/schema.js';
+import { redactSecrets } from '@/admin/profiles-routes.js';
 import { Html, html, renderToString } from '@/shared/html.js';
 
 const STYLES = `
@@ -244,7 +245,7 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
   // dangerous in element-text context, only in attribute values. Standard
   // escape would convert " to &quot;, which is correct but visually noisy
   // for a JSON dump. Escape only the chars that break out of element-text.
-  const configJson = JSON.stringify(config, null, 2);
+  const configJson = JSON.stringify(redactSecrets(config), null, 2);
   const safeJson = configJson.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
   const safeJsonHtml = new Html(safeJson); // escapes &, <, > — safe for element-text context

@@ -41,7 +41,7 @@ async function buildApp() {
   const runtime = createRuntimeConfig(config);
   const pending = createPendingAuthStore({ ttlMs: 60_000 });
   const app = Fastify();
-  const tenant = buildActiveTenant({ config, runtime, pending });
+  const tenant = buildActiveTenant({ runtime, pending });
   registerAuthorize(app, { getTenant: () => tenant });
   return { app, runtime, pending };
 }
@@ -161,7 +161,7 @@ describe('GET /authorize', () => {
     const runtime = createRuntimeConfig(config);
     const pending = createPendingAuthStore({ ttlMs: 60_000 });
     const app = Fastify();
-    const tenant = buildActiveTenant({ slug: 'acme', config, runtime, pending });
+    const tenant = buildActiveTenant({ slug: 'acme', runtime, pending });
     registerAuthorize(app, { getTenant: () => tenant, adminPath: (slug) => `/admin/${slug}` });
 
     const res = await app.inject({ method: 'GET', url: `/authorize?${validParams}` });
@@ -199,7 +199,7 @@ describe('allowedScopes policy', () => {
     const runtime = createRuntimeConfig(config);
     const pending = createPendingAuthStore({ ttlMs: 60_000 });
     const app = Fastify();
-    const tenant = buildActiveTenant({ config, runtime, pending });
+    const tenant = buildActiveTenant({ runtime, pending });
     registerAuthorize(app, { getTenant: () => tenant });
     return { app, runtime, pending };
   }

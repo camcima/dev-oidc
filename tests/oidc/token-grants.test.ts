@@ -45,7 +45,6 @@ async function buildApp(clients: Client[] = [client()]) {
     status: 'active',
     issuer: 'http://localhost:8095',
     watcher: null,
-    config,
     runtime,
     codes,
     keyMaterial,

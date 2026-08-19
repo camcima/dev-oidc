@@ -48,7 +48,7 @@ async function buildApp() {
   const codes = createCodeStore({ ttlMs: 60_000 });
   const app = Fastify();
   await app.register(formbody);
-  const tenant = buildActiveTenant({ config, runtime, pending, codes });
+  const tenant = buildActiveTenant({ runtime, pending, codes });
   registerComplete(app, { getTenant: () => tenant });
   return { app, pending, codes };
 }

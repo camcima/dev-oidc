@@ -4,7 +4,7 @@ import { formatHostPort, requirePublicUrlOrSafeHost, stripTrailingSlash } from '
 import { createLogger, type DevOidcLogger } from '@/logger.js';
 import { loadTlsMaterial, type TlsMaterial } from '@/server/tls-loader.js';
 import path from 'node:path';
-import os from 'node:os';
+import { defaultCertCacheDir, defaultTlsHostnames, expandTildePath } from '@/shared/paths.js';
 
 export interface LegacyStartOptions {
   configPath: string;
@@ -20,37 +20,6 @@ export interface LegacyStartResult {
   port: number;
   host: string;
   issuer: string;
-}
-
-function defaultCacheDir(): string {
-  const xdg = process.env.XDG_CACHE_HOME;
-  const root = xdg && xdg.trim().length > 0 ? xdg : path.join(os.homedir(), '.cache');
-  return path.join(root, 'dev-oidc', 'certs');
-}
-
-/**
- * Expand a leading `~/` to the user's home directory. Node's `fs` does not
- * interpret tildes (the shell normally does), so a path like
- * `~/certs/dev-oidc.pem` typed into the CLI or hub.json would otherwise be
- * read as a literal `./~/certs/dev-oidc.pem` and fail with ENOENT.
- */
-export function expandTildePath(input: string): string {
-  if (input === '~') return os.homedir();
-  if (input.startsWith('~/')) return path.join(os.homedir(), input.slice(2));
-  return input;
-}
-
-function buildDefaultHostnames(input: { host: string; publicUrl?: string }): string[] {
-  const set = new Set<string>([input.host, 'localhost']);
-  if (input.publicUrl) {
-    try {
-      const u = new URL(input.publicUrl);
-      if (u.hostname) set.add(u.hostname);
-    } catch {
-      // ignore
-    }
-  }
-  return [...set];
 }
 
 export async function startLegacy(options: LegacyStartOptions): Promise<LegacyStartResult> {
@@ -74,8 +43,8 @@ export async function startLegacy(options: LegacyStartOptions): Promise<LegacySt
         : { hostnames: options.tls.hostnames };
     tlsMaterial = await loadTlsMaterial({
       config: tlsConfig,
-      cacheDir: defaultCacheDir(),
-      defaultHostnames: buildDefaultHostnames({ host: options.host, publicUrl: options.publicUrl }),
+      cacheDir: defaultCertCacheDir(),
+      defaultHostnames: defaultTlsHostnames(options.host, options.publicUrl),
     });
   }
 

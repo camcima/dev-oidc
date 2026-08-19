@@ -39,7 +39,7 @@ async function buildApp() {
   const config = buildConfig();
   const runtime = createRuntimeConfig(config);
   const app = Fastify();
-  const tenant = buildActiveTenant({ config, runtime });
+  const tenant = buildActiveTenant({ runtime });
   registerLogout(app, { getTenant: () => tenant });
   return { app };
 }
