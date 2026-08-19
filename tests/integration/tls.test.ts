@@ -60,11 +60,11 @@ describe('TLS integration (real socket)', () => {
     expect(json.issuer).toMatch(/^https:\/\//);
   });
 
-  it('returns 301 to https:// for plain-HTTP requests on the same port', async () => {
+  it('returns 308 to https:// for plain-HTTP requests on the same port', async () => {
     const { statusCode, headers } = await fetchHttpHeadersOnly(
       `http://127.0.0.1:${String(port)}/.well-known/openid-configuration`,
     );
-    expect(statusCode).toBe(301);
+    expect(statusCode).toBe(308);
     expect(headers.location).toMatch(/^https:\/\/.*\/\.well-known\/openid-configuration$/);
   });
 });

@@ -3,8 +3,8 @@ import path from 'node:path';
 import { loadConfig } from '@/config/loader.js';
 import { createRuntimeConfig } from '@/config/runtime.js';
 import { watchConfig, type ConfigWatcher } from '@/config/watcher.js';
-import { createCodeStore } from '@/oidc/codes.js';
-import { createPendingAuthStore } from '@/oidc/pending.js';
+import { createCodeStore, DEFAULT_CODE_TTL_MS } from '@/oidc/codes.js';
+import { createPendingAuthStore, DEFAULT_PENDING_TTL_MS } from '@/oidc/pending.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import type { HubTenantEntry } from '@/hub/schema.js';
@@ -100,19 +100,24 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
 
     const runtime = createRuntimeConfig(config);
     const codes = createCodeStore({
-      ttlMs: 60_000,
-      refreshTtlMs: config.refreshTokenTtlSeconds * 1_000,
+      ttlMs: DEFAULT_CODE_TTL_MS,
+      refreshTtlMs: () => runtime.get().refreshTokenTtlSeconds * 1_000,
     });
-    const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
+    const pending = createPendingAuthStore({ ttlMs: DEFAULT_PENDING_TTL_MS });
     const jwks = buildJwks(keyMaterial);
     const issuer = computeIssuer({ publicUrl: options.publicUrl, slug: entry.slug });
+
+    // `runtime.set` fires onChange only when the canonical content actually
+    // differs, so this is the single source of profilesChanged: a disk reload
+    // that changes nothing stays silent, and one that does change something
+    // emits exactly once (an extra emit alongside runtime.set double-fired).
+    runtime.onChange(() => events.emit('profilesChanged', { slug: entry.slug }));
 
     let watcher: ConfigWatcher | null = null;
     try {
       watcher = await watchConfig(entry.configPath, {
         onReload: (newConfig) => {
           runtime.set(newConfig);
-          events.emit('profilesChanged', { slug: entry.slug });
         },
         onError: (err) => {
           logger.warn(
@@ -127,8 +132,6 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         'failed to start tenant config watcher; tenant active but will not hot-reload',
       );
     }
-
-    runtime.onChange(() => events.emit('profilesChanged', { slug: entry.slug }));
 
     const active: ActiveTenantState = {
       slug: entry.slug,

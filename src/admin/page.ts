@@ -35,6 +35,29 @@ const STYLES = `
 // nosemgrep: javascript.lang.security.audit.unknown-value-with-script-tag.unknown-value-with-script-tag
 const SAFE_STYLES = new Html(STYLES); // module-level const string literal, never externally controlled
 
+// Every optional profile field gets an input on both forms. Leaving one blank
+// submits an explicit null, which the API reads as "clear this field" — see
+// mergeProfile in admin/profiles-routes.ts.
+function optionalFieldRows(suffix: string, profile?: Profile): Html {
+  const verified = profile?.emailVerified;
+  return html`<label for="givenName-${suffix}">Given name</label>
+    <input name="givenName" id="givenName-${suffix}" value="${profile?.givenName ?? ''}" />
+    <label for="familyName-${suffix}">Family name</label>
+    <input name="familyName" id="familyName-${suffix}" value="${profile?.familyName ?? ''}" />
+    <label for="avatar-${suffix}">Avatar URL</label>
+    <input name="avatar" id="avatar-${suffix}" type="url" value="${profile?.avatar ?? ''}" />
+    <label for="locale-${suffix}">Locale</label>
+    <input name="locale" id="locale-${suffix}" value="${profile?.locale ?? ''}" />
+    <label for="hostedDomain-${suffix}">Hosted domain</label>
+    <input name="hostedDomain" id="hostedDomain-${suffix}" value="${profile?.hostedDomain ?? ''}" />
+    <label for="emailVerified-${suffix}">Email verified</label>
+    <select name="emailVerified" id="emailVerified-${suffix}">
+      <option value="" ${verified === undefined && new Html('selected')}>(unset)</option>
+      <option value="true" ${verified === true && new Html('selected')}>true</option>
+      <option value="false" ${verified === false && new Html('selected')}>false</option>
+    </select>`;
+}
+
 function profileEditForm(profile: Profile, apiBase: string): Html {
   const claimsJson = JSON.stringify(profile.claims, null, 2);
   return html`<form
@@ -54,6 +77,7 @@ function profileEditForm(profile: Profile, apiBase: string): Html {
     />
     <label for="email-${profile.id}">Email</label>
     <input name="email" id="email-${profile.id}" type="email" value="${profile.email}" required />
+    ${optionalFieldRows(profile.id, profile)}
     <label for="claims-${profile.id}">Claims (JSON)</label>
     <textarea name="claims" id="claims-${profile.id}">${claimsJson}</textarea>
     <div class="wide">
@@ -71,6 +95,7 @@ function profileAddForm(apiBase: string): Html {
     <input name="displayName" id="displayName-new" value="" required />
     <label for="email-new">Email</label>
     <input name="email" id="email-new" type="email" value="" required />
+    ${optionalFieldRows('new')}
     <label for="claims-new">Claims (JSON)</label>
     <textarea name="claims" id="claims-new">{}</textarea>
     <div class="wide">
@@ -175,13 +200,23 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
       const url = form.dataset.api;
       let body = undefined;
       if (method === 'POST' || method === 'PUT') {
+        const optional = ['givenName', 'familyName', 'avatar', 'locale', 'hostedDomain'];
         const data = {};
         for (const el of form.elements) {
-          if (!(el instanceof HTMLInputElement) && !(el instanceof HTMLTextAreaElement)) continue;
+          const editable = el instanceof HTMLInputElement
+            || el instanceof HTMLTextAreaElement
+            || el instanceof HTMLSelectElement;
+          if (!editable) continue;
           if (!el.name) continue;
           if (el.name === 'claims') {
             try { data[el.name] = el.value ? JSON.parse(el.value) : {}; }
             catch (e) { alert('Invalid JSON in claims'); return; }
+          } else if (el.name === 'emailVerified') {
+            // Tri-state select: "" means unset, otherwise a real boolean.
+            data[el.name] = el.value === '' ? null : el.value === 'true';
+          } else if (optional.indexOf(el.name) !== -1) {
+            // Blank optional field means "clear it", which the API spells null.
+            data[el.name] = el.value.trim() === '' ? null : el.value.trim();
           } else {
             data[el.name] = el.value;
           }

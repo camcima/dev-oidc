@@ -199,7 +199,7 @@ export async function createHubServer(options: CreateHubServerOptions): Promise<
           listenPort: hubConfig.server.port,
         });
         const target = `https://${host}${req.url}`;
-        await reply.code(301).header('Location', target).send();
+        await reply.code(308).header('Location', target).send();
       }
     });
   }

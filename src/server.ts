@@ -18,8 +18,8 @@ import { registerComplete } from '@/oidc/complete.js';
 import { buildDiscoveryDocument } from '@/oidc/discovery.js';
 import { buildJwks } from '@/oidc/jwks.js';
 import { createKeyMaterial } from '@/oidc/keys.js';
-import { createCodeStore } from '@/oidc/codes.js';
-import { createPendingAuthStore } from '@/oidc/pending.js';
+import { createCodeStore, DEFAULT_CODE_TTL_MS } from '@/oidc/codes.js';
+import { createPendingAuthStore, DEFAULT_PENDING_TTL_MS } from '@/oidc/pending.js';
 import { registerToken } from '@/oidc/token.js';
 import { registerLogout } from '@/oidc/logout.js';
 import { registerUserInfo } from '@/oidc/userinfo.js';
@@ -50,7 +50,7 @@ export interface CreateServerOptions {
   publicUrl?: string;
   logger?: DevOidcLogger;
   /**
-   * When set, dev-oidc serves HTTPS (and same-port HTTP→HTTPS 301 redirect)
+   * When set, dev-oidc serves HTTPS (and same-port HTTP→HTTPS 308 redirect)
    * using the provided cert/key. Loaded by `loadTlsMaterial` upstream.
    */
   tls?: { cert: Buffer; key: Buffer };
@@ -84,10 +84,10 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
   const jwksDocument = buildJwks(keyMaterial);
 
   const codes = createCodeStore({
-    ttlMs: 60_000,
-    refreshTtlMs: options.config.refreshTokenTtlSeconds * 1_000,
+    ttlMs: DEFAULT_CODE_TTL_MS,
+    refreshTtlMs: () => runtime.get().refreshTokenTtlSeconds * 1_000,
   });
-  const pending = createPendingAuthStore({ ttlMs: 10 * 60_000 });
+  const pending = createPendingAuthStore({ ttlMs: DEFAULT_PENDING_TTL_MS });
 
   let watcher: ConfigWatcher | null = null;
   if (options.configFilePath) {
@@ -149,7 +149,7 @@ export async function createDevOidcServer(options: CreateServerOptions): Promise
           listenPort,
         });
         const target = `https://${host}${req.url}`;
-        await reply.code(301).header('Location', target).send();
+        await reply.code(308).header('Location', target).send();
       }
     });
   }

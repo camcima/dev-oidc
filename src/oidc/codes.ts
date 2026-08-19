@@ -1,6 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { DEFAULT_MAX_ENTRIES, type Entry, evictForInsert } from '@/oidc/expiring-map.js';
 
+/** Authorization codes are exchanged immediately; a minute is generous. */
+export const DEFAULT_CODE_TTL_MS = 60_000;
+
 export interface CodeRecord {
   clientId: string;
   profileId: string;
@@ -20,7 +23,10 @@ export interface RefreshRecord {
 
 export interface CodeStoreOptions {
   ttlMs: number;
-  refreshTtlMs?: number;
+  // Accepts a getter so a hot-reloaded `refreshTokenTtlSeconds` applies to
+  // tokens minted after the edit. A fixed number captured at construction
+  // silently ignored every later config change.
+  refreshTtlMs?: number | (() => number);
   // Hard cap on live entries per map (codes, refresh) to bound memory in a
   // long-running hub. Defaults to 10k, far above any realistic local-dev load.
   maxEntries?: number;
@@ -51,7 +57,8 @@ export interface CodeStore {
 export function createCodeStore(options: CodeStoreOptions): CodeStore {
   const codes = new Map<string, Entry<CodeRecord>>();
   const refresh = new Map<string, Entry<RefreshRecord>>();
-  const refreshTtlMs = options.refreshTtlMs ?? 8 * 60 * 60 * 1_000;
+  const configured = options.refreshTtlMs ?? 8 * 60 * 60 * 1_000;
+  const refreshTtlMs = (): number => (typeof configured === 'function' ? configured() : configured);
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
 
   const mint = (bytes: number): string => randomBytes(bytes).toString('base64url');
@@ -91,7 +98,7 @@ export function createCodeStore(options: CodeStoreOptions): CodeStore {
     issueRefresh(record) {
       evictForInsert(refresh, maxEntries);
       const token = mint(48);
-      refresh.set(token, { value: record, expiresAt: Date.now() + refreshTtlMs });
+      refresh.set(token, { value: record, expiresAt: Date.now() + refreshTtlMs() });
       return token;
     },
     consumeRefresh(token) {
