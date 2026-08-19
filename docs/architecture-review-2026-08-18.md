@@ -4,6 +4,10 @@
 **Scope:** Full `src/` tree (~4,900 LOC), build/CI/Docker configuration, examples, and test suite.
 **Verification baseline:** `tsc --noEmit` clean, ESLint clean, **405/405 tests passing** across 49 files.
 
+> **Status (2026-08-18):** every finding below has been addressed on branch
+> `fix/architecture-review-findings`. See CHANGELOG.md `[Unreleased]` for the
+> user-facing summary. Suite is now 471 tests across 60 files.
+
 ---
 
 ## 1. Overall assessment
