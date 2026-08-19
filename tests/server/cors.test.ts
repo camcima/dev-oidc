@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createDevOidcServer } from '@/server.js';
-import { isLoopbackOrigin } from '@/server/cors.js';
+import { configuredOrigins, isLoopbackOrigin } from '@/server/cors.js';
 
 function config(): Config {
   return {
@@ -80,5 +80,52 @@ describe('CORS is limited to local development origins', () => {
     } finally {
       await server.close();
     }
+  });
+});
+
+describe('CORS helpers tolerate malformed input', () => {
+  it.each(['', 'not a url', 'null', '://missing-scheme'])(
+    'treats %o as a non-loopback origin rather than throwing',
+    (value) => {
+      expect(isLoopbackOrigin(value)).toBe(false);
+    },
+  );
+
+  it('skips config entries that are not parseable URLs', () => {
+    const origins = configuredOrigins(
+      [
+        {
+          ...config(),
+          clients: [
+            {
+              ...config().clients[0]!,
+              redirectUris: ['http://good.test:3000/cb', 'nonsense'],
+              postLogoutRedirectUris: [],
+            },
+          ],
+        },
+      ],
+      'also-not-a-url',
+    );
+    expect([...origins]).toEqual(['http://good.test:3000']);
+  });
+
+  it('collects postLogoutRedirectUris as well as redirectUris', () => {
+    const origins = configuredOrigins(
+      [
+        {
+          ...config(),
+          clients: [
+            {
+              ...config().clients[0]!,
+              redirectUris: ['http://a.test:1/cb'],
+              postLogoutRedirectUris: ['http://b.test:2/bye'],
+            },
+          ],
+        },
+      ],
+      undefined,
+    );
+    expect([...origins].sort()).toEqual(['http://a.test:1', 'http://b.test:2']);
   });
 });

@@ -8,8 +8,6 @@
  */
 export interface KeyedMutex {
   run: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
-  /** Number of keys with work queued or in flight. For tests. */
-  size: () => number;
 }
 
 export function createKeyedMutex(): KeyedMutex {
@@ -31,6 +29,5 @@ export function createKeyedMutex(): KeyedMutex {
       });
       return result;
     },
-    size: () => queues.size,
   };
 }

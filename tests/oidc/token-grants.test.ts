@@ -261,3 +261,71 @@ describe('Basic auth credentials are form-urlencoded (RFC 6749 2.3.1)', () => {
     await app.close();
   });
 });
+
+describe('authorization codes issued without a PKCE challenge', () => {
+  function issueWithoutChallenge(codes: Awaited<ReturnType<typeof buildApp>>['codes']): string {
+    return codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      nonce: '',
+      redirectUri: 'http://localhost:5173/cb',
+      scope: 'openid',
+    });
+  }
+
+  it('exchanges without a code_verifier', async () => {
+    const { app, codes } = await buildApp([client({ clientSecret: 's3cret' })]);
+    const res = await post(app, {
+      grant_type: 'authorization_code',
+      code: issueWithoutChallenge(codes),
+      client_id: 'my-app',
+      client_secret: 's3cret',
+      redirect_uri: 'http://localhost:5173/cb',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.id_token).toBeDefined();
+    expect(body.access_token).toBeDefined();
+    await app.close();
+  });
+
+  it('ignores a stray code_verifier when no challenge was stored', async () => {
+    const { app, codes } = await buildApp([client({ clientSecret: 's3cret' })]);
+    const res = await post(app, {
+      grant_type: 'authorization_code',
+      code: issueWithoutChallenge(codes),
+      code_verifier: 'unsolicited-verifier',
+      client_id: 'my-app',
+      client_secret: 's3cret',
+      redirect_uri: 'http://localhost:5173/cb',
+    });
+
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it('still rejects a missing verifier when a challenge WAS stored', async () => {
+    const { app, codes } = await buildApp();
+    const code = codes.issue({
+      clientId: 'my-app',
+      profileId: 'alice',
+      codeChallenge: s256('verifier-0123456789abcdef0123456789abcdef'),
+      nonce: '',
+      redirectUri: 'http://localhost:5173/cb',
+      scope: 'openid',
+    });
+
+    const res = await post(app, {
+      grant_type: 'authorization_code',
+      code,
+      client_id: 'my-app',
+      redirect_uri: 'http://localhost:5173/cb',
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('invalid_grant');
+    expect(res.json().error_description).toContain('code_verifier');
+    await app.close();
+  });
+});

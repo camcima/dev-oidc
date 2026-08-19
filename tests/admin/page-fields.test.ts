@@ -68,3 +68,20 @@ describe('admin edit dialog exposes every editable profile field', () => {
     }
   });
 });
+
+describe('admin page redacts client secrets in its raw-config dump', () => {
+  it('never renders a configured clientSecret', () => {
+    const withSecret: Config = {
+      ...config(),
+      clients: [{ ...config().clients[0]!, clientSecret: 'super-secret-value' }],
+    };
+    const html = renderAdminPage({ config: withSecret, slug: '(legacy)' });
+    expect(html).not.toContain('super-secret-value');
+    expect(html).toContain('[redacted]');
+  });
+
+  it('leaves a public client untouched', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).not.toContain('[redacted]');
+  });
+});
