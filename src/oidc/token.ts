@@ -112,6 +112,9 @@ function secretMatches(expected: string, offered: string[]): boolean {
 export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
   const prefix = deps.pathPrefix ?? '';
   app.post(`${prefix}/token`, async (request, reply) => {
+    // RFC 6749 §5.1/§5.2: token responses, successful or not, must not be
+    // stored by browsers or intermediaries.
+    void reply.header('cache-control', 'no-store').header('pragma', 'no-cache');
     const tenant = deps.getTenant(request);
     const read = readParams(request.body, TOKEN_PARAMS);
     if (!read.ok) {
