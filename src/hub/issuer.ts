@@ -18,9 +18,12 @@ export function isBindAllHost(host: string): boolean {
  * already-bracketed IPv6 hosts pass through unchanged.
  */
 export function formatHostPort(host: string, port: number): string {
-  const needsBrackets = host.includes(':') && !host.startsWith('[');
-  const authorityHost = needsBrackets ? `[${host}]` : host;
-  return `${authorityHost}:${port.toString()}`;
+  return `${formatHost(host)}:${port.toString()}`;
+}
+
+/** A host as it appears in a URL authority: bare IPv6 addresses get brackets. */
+export function formatHost(host: string): string {
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
 export function deriveDefaultPublicUrl(input: {
@@ -56,10 +59,9 @@ export function pickRedirectHost(input: {
   listenPort: number;
 }): string {
   const allowed = new Set<string>();
-  const portSuffix = `:${input.listenPort.toString()}`;
   if (!isBindAllHost(input.listenHost)) {
-    allowed.add(`${input.listenHost}${portSuffix}`);
-    allowed.add(input.listenHost);
+    allowed.add(formatHostPort(input.listenHost, input.listenPort));
+    allowed.add(formatHost(input.listenHost));
   }
   let publicHost: string | undefined;
   if (input.publicUrl) {
@@ -77,8 +79,8 @@ export function pickRedirectHost(input: {
   }
   if (publicHost) return publicHost;
   return isBindAllHost(input.listenHost)
-    ? `127.0.0.1${portSuffix}`
-    : `${input.listenHost}${portSuffix}`;
+    ? formatHostPort('127.0.0.1', input.listenPort)
+    : formatHostPort(input.listenHost, input.listenPort);
 }
 
 /**

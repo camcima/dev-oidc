@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { isBindAllHost } from '@/hub/issuer.js';
+import { formatHost, formatHostPort, isBindAllHost } from '@/hub/issuer.js';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', '[::1]', 'localhost']);
 
@@ -39,8 +39,8 @@ export function buildAdminAllowedHosts(input: BuildAllowedHostsInput): Set<strin
   const portSuffix = `:${input.listenPort.toString()}`;
 
   if (!isBindAllHost(input.listenHost)) {
-    allowed.add(`${input.listenHost}${portSuffix}`);
-    allowed.add(input.listenHost);
+    allowed.add(formatHostPort(input.listenHost, input.listenPort));
+    allowed.add(formatHost(input.listenHost));
   }
   if (LOOPBACK_HOSTS.has(input.listenHost) || isBindAllHost(input.listenHost)) {
     for (const lb of LOOPBACK_HOSTS) {
