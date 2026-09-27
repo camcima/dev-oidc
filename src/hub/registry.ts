@@ -65,6 +65,19 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
   const withSlugLock = <T>(slug: string, fn: () => Promise<T>): Promise<T> =>
     slugMutex.run(slug, fn);
 
+  // Per-slug locks order operations on one tenant, but a reconcile describes
+  // the whole desired state. Two overlapping reconciles each diffed their own
+  // snapshot of the map, so a newer "remove app" could run while an older
+  // "add app" was still activating, and the older one then mounted it anyway.
+  // Reconcile and shutdown run one at a time, in call order.
+  let lifecycleTail: Promise<unknown> = Promise.resolve();
+  const inLifecycleOrder = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = lifecycleTail.then(fn);
+    lifecycleTail = run.catch(() => undefined);
+    return run;
+  };
+  let closed = false;
+
   async function activate(entry: HubTenantEntry): Promise<TenantState> {
     const configDir = path.dirname(entry.configPath);
     let config;
@@ -147,7 +160,7 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
     }
   }
 
-  return {
+  const registry: TenantRegistry = {
     list: () => [...tenants.values()],
     get: (slug) => tenants.get(slug),
     events,
@@ -161,6 +174,11 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         // stores remain valid until deactivate() runs. New requests
         // resolve to the new state from the swap onward.
         const state = await activate(entry);
+        if (closed) {
+          // Shutdown began while this tenant was activating; never publish it.
+          await deactivate(state);
+          return;
+        }
         const previous = tenants.get(entry.slug);
         tenants.set(entry.slug, state);
         if (previous) {
@@ -183,33 +201,43 @@ export function createTenantRegistry(options: CreateTenantRegistryOptions): Tena
         events.emit('removed', { slug });
       });
     },
-    async reconcile(entries) {
-      const incomingEnabled = entries.filter((e) => e.enabled);
-      const incomingSlugs = new Set(incomingEnabled.map((e) => e.slug));
-
-      // Remove tenants no longer in the list (or now disabled).
-      for (const slug of [...tenants.keys()]) {
-        if (!incomingSlugs.has(slug)) {
-          await this.remove(slug);
-        }
-      }
-
-      // Add or refresh remaining entries. We retry tenants currently in the
-      // 'error' state on every reconcile so that fixing the project config
-      // and re-saving hub.json (or any other reconcile trigger) brings the
-      // tenant back without forcing the user to unregister + register.
-      for (const entry of incomingEnabled) {
-        const existing = tenants.get(entry.slug);
-        if (!existing || existing.configPath !== entry.configPath || existing.status === 'error') {
-          await this.add(entry);
-        }
-      }
+    reconcile(entries) {
+      return inLifecycleOrder(() => reconcileNow(entries));
     },
     async closeAll() {
-      for (const state of tenants.values()) {
-        await deactivate(state);
-      }
-      tenants.clear();
+      closed = true;
+      await inLifecycleOrder(async () => {
+        for (const state of tenants.values()) {
+          await deactivate(state);
+        }
+        tenants.clear();
+      });
     },
   };
+
+  async function reconcileNow(entries: readonly HubTenantEntry[]): Promise<void> {
+    if (closed) return;
+    const incomingEnabled = entries.filter((e) => e.enabled);
+    const incomingSlugs = new Set(incomingEnabled.map((e) => e.slug));
+
+    // Remove tenants no longer in the list (or now disabled).
+    for (const slug of [...tenants.keys()]) {
+      if (!incomingSlugs.has(slug)) {
+        await registry.remove(slug);
+      }
+    }
+
+    // Add or refresh remaining entries. We retry tenants currently in the
+    // 'error' state on every reconcile so that fixing the project config
+    // and re-saving hub.json (or any other reconcile trigger) brings the
+    // tenant back without forcing the user to unregister + register.
+    for (const entry of incomingEnabled) {
+      const existing = tenants.get(entry.slug);
+      if (!existing || existing.configPath !== entry.configPath || existing.status === 'error') {
+        await registry.add(entry);
+      }
+    }
+  }
+
+  return registry;
 }
