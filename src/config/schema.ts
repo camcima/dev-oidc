@@ -2,13 +2,17 @@ import { z } from 'zod';
 import { RESERVED_CLAIM_NAMES } from '@/oidc/claims.js';
 import { httpUrl } from '@/shared/url-schema.js';
 
-const SigningKeySchema = z.object({
+// Nested objects are strict so a misspelled field fails validation instead of
+// being stripped: `allowedScope` for `allowedScopes` used to parse cleanly and
+// leave the client with unrestricted scopes. `profile.claims` stays an open
+// record because arbitrary claim names are its purpose.
+const SigningKeySchema = z.strictObject({
   kid: z.string().min(1),
   alg: z.enum(['RS256', 'ES256']).default('RS256'),
   source: z.union([z.literal('generate'), z.string().regex(/^file:.+/)]).default('generate'),
 });
 
-const ClientSchema = z.object({
+const ClientSchema = z.strictObject({
   clientId: z.string().min(1),
   clientSecret: z.string().min(1).optional(),
   redirectUris: z.array(httpUrl()).min(1),
@@ -25,14 +29,14 @@ const ClientSchema = z.object({
   requirePkce: z.boolean().optional(),
 });
 
-const BrandingInner = z.object({
+const BrandingInner = z.strictObject({
   title: z.string().default('Dev OIDC Login'),
   accentColor: z.string().default('#1f6feb'),
   logoUrl: httpUrl().nullable().default(null),
 });
 const BrandingSchema = BrandingInner.default(BrandingInner.parse({}));
 
-const ProfileSchema = z.object({
+const ProfileSchema = z.strictObject({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.email(),
