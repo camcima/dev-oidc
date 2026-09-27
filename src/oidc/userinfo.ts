@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
-import { assembleClaims } from '@/oidc/claims.js';
+import { assembleClaims, CLIENT_CREDENTIALS_GTY } from '@/oidc/claims.js';
 
 export interface UserInfoDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -53,6 +53,11 @@ export function registerUserInfo(app: FastifyInstance, deps: UserInfoDeps): void
     // userinfo is for access tokens only. dev-oidc access tokens always carry a
     // `scope` claim; ID tokens do not — reject anything without one.
     if (typeof payload.scope !== 'string') {
+      return unauthorized(reply, true);
+    }
+    // A client_credentials token represents the client, not a person. Its sub
+    // is the client id, which can coincide with a profile id.
+    if (payload.gty === CLIENT_CREDENTIALS_GTY) {
       return unauthorized(reply, true);
     }
 

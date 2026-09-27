@@ -32,7 +32,15 @@ export const RESERVED_CLAIM_NAMES: readonly string[] = [
   'at_hash',
   'auth_time',
   'scope',
+  'gty',
 ];
+
+/**
+ * `gty` value dev-oidc stamps on client_credentials access tokens, following
+ * Auth0. UserInfo uses it to refuse tokens that represent no end-user; it is
+ * reserved above so a profile's custom claims cannot forge or collide with it.
+ */
+export const CLIENT_CREDENTIALS_GTY = 'client-credentials';
 
 const STANDARD_CLAIMS_BY_SCOPE: Record<string, readonly string[]> = {
   profile: ['name', 'given_name', 'family_name', 'picture', 'locale'],

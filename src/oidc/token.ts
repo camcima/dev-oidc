@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Client, Profile } from '@/config/schema.js';
-import { assembleClaims } from '@/oidc/claims.js';
+import { assembleClaims, CLIENT_CREDENTIALS_GTY } from '@/oidc/claims.js';
 
 export interface TokenDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -271,7 +271,11 @@ async function handleClientCredentialsGrant(
   }
 
   const config = tenant.runtime.get();
-  const accessToken = await new jose.SignJWT({ scope, client_id: client.clientId })
+  const accessToken = await new jose.SignJWT({
+    scope,
+    client_id: client.clientId,
+    gty: CLIENT_CREDENTIALS_GTY,
+  })
     .setProtectedHeader({
       alg: tenant.keyMaterial.alg,
       kid: tenant.keyMaterial.kid,
