@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { stripTrailingSlash } from '@/hub/issuer.js';
+import { formatHostPort, stripTrailingSlash } from '@/hub/issuer.js';
 import { configuredOrigins } from '@/server/cors.js';
 import { buildTenantDiscovery, createBaseApp } from '@/server/base.js';
 import path from 'node:path';
@@ -57,7 +57,7 @@ function deriveIssuer(options: CreateServerOptions): string {
   const host = options.listenHost ?? '127.0.0.1';
   const port = options.listenPort ?? 8095;
   const scheme = options.tls ? 'https' : 'http';
-  return `${scheme}://${host}:${port.toString()}`;
+  return `${scheme}://${formatHostPort(host, port)}`;
 }
 
 export interface DevOidcServer {
