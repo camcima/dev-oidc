@@ -58,6 +58,26 @@ export function buildAdminAllowedHosts(input: BuildAllowedHostsInput): Set<strin
   return allowed;
 }
 
+/**
+ * Matches exactly /admin and the /admin/<...> subtree. `startsWith('/admin')`
+ * would also match sibling paths like `/administer` or `/admin-foo`.
+ */
+function isAdminPath(path: string | undefined): boolean {
+  if (path === undefined) return false;
+  return path === '/admin' || path.startsWith('/admin/');
+}
+
+/** Path component of a request URL with percent-escapes decoded. */
+function decodedPath(url: string): string {
+  const q = url.indexOf('?');
+  const raw = q === -1 ? url : url.slice(0, q);
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
 export interface AdminGuardOptions {
   allowedHosts: Set<string>;
 }
@@ -79,12 +99,13 @@ export function registerAdminGuard(app: FastifyInstance, options: AdminGuardOpti
   const { allowedHosts } = options;
 
   app.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
-    const url = req.url;
-    // Match exactly /admin and the /admin/<...> subtree only. Earlier
-    // implementations used `startsWith('/admin')` which would also match
-    // sibling paths like `/administer` or `/admin-foo`.
-    const isAdminPath = url === '/admin' || url.startsWith('/admin/') || url.startsWith('/admin?');
-    if (!isAdminPath) return;
+    // The router decodes percent-escapes before matching, so the raw URL is
+    // not what decides which handler runs: `/%61dmin/api/profiles` reaches the
+    // profile routes. Ask the router which route it matched, and also check the
+    // decoded path so unmatched requests (CORS preflight's wildcard route, 404s)
+    // under /admin are still covered.
+    const isAdmin = isAdminPath(req.routeOptions.url) || isAdminPath(decodedPath(req.url));
+    if (!isAdmin) return;
 
     const host = req.headers.host;
     if (!host || !allowedHosts.has(normalizeHostHeader(host))) {

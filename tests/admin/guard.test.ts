@@ -125,6 +125,33 @@ describe('admin guard', () => {
     }
   });
 
+  // Fastify's router decodes percent-escapes before matching, so a guard that
+  // compared the raw URL let `/%61dmin/...` reach admin handlers unchecked.
+  it.each([
+    '/%61dmin/api/test',
+    '/adm%69n/api/test',
+    '/%61%64%6d%69%6e/api/test',
+    '/admin/%61pi/test',
+    '/%41dmin/api/test',
+  ])('rejects a foreign Host on the percent-encoded admin path %s', async (url) => {
+    app.post('/admin/api/test', async () => ({ ok: true }));
+    const res = await app.inject({
+      method: 'POST',
+      url,
+      headers: { host: 'evil.test', origin: 'https://evil.test', 'sec-fetch-site': 'cross-site' },
+    });
+    expect(res.statusCode).not.toBe(200);
+  });
+
+  it('rejects cross-site Fetch Metadata on an encoded admin path with an allowed Host', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/%61dmin/api/test',
+      headers: { host: 'localhost:8095', 'sec-fetch-site': 'cross-site' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('still matches /admin with a query string', async () => {
     app.get('/admin', async () => ({ ok: true }));
     const res = await app.inject({
