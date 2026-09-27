@@ -24,22 +24,30 @@ const SlugSchema = z
   .regex(SLUG_REGEX, 'slug must match ^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$')
   .refine((s) => !isReservedSlug(s), { message: 'slug is reserved' });
 
-const TenantEntrySchema = z.object({
-  slug: SlugSchema,
-  configPath: z
-    .string()
-    .min(1)
-    .refine((p) => path.isAbsolute(p), { message: 'configPath must be absolute' }),
-  enabled: z.boolean().default(true),
-});
+// Tenant and TLS entries follow the same rule as the root and `server`:
+// unknown keys are errors (a typo like `enable: false` used to be stripped,
+// leaving the tenant enabled) but "//" comment keys are allowed and kept.
+const TenantEntrySchema = z
+  .looseObject({
+    slug: SlugSchema,
+    configPath: z
+      .string()
+      .min(1)
+      .refine((p) => path.isAbsolute(p), { message: 'configPath must be absolute' }),
+    enabled: z.boolean().default(true),
+  })
+  .superRefine((v, ctx) => {
+    rejectUnknownKeys(v, KNOWN_TENANT_KEYS, ctx, []);
+  });
 
 const TlsSchema = z
-  .object({
+  .looseObject({
     hostnames: z.array(z.string().min(1)).optional(),
     cert: z.string().min(1).optional(),
     key: z.string().min(1).optional(),
   })
   .superRefine((v, ctx) => {
+    rejectUnknownKeys(v, KNOWN_TLS_KEYS, ctx, []);
     if (Boolean(v.cert) !== Boolean(v.key)) {
       ctx.addIssue({
         code: 'custom',
@@ -89,6 +97,8 @@ function rejectUnknownKeys(
 }
 
 const KNOWN_SERVER_KEYS = new Set(['port', 'host', 'publicUrl', 'tls']);
+const KNOWN_TENANT_KEYS = new Set(['slug', 'configPath', 'enabled']);
+const KNOWN_TLS_KEYS = new Set(['hostnames', 'cert', 'key']);
 const KNOWN_ROOT_KEYS = new Set(['version', 'server', 'tenants']);
 
 export const HubConfigSchema = z

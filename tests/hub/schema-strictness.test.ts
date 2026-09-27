@@ -65,3 +65,43 @@ describe('hub config comments survive a register/unregister round trip', () => {
     expect(await loadHubConfig(file)).toBeDefined();
   });
 });
+
+describe('hub config rejects typos inside tenant and tls entries', () => {
+  const server = { port: 8095, host: '127.0.0.1' };
+  const tenant = { slug: 'app', configPath: '/tmp/app/dev-oidc.config.json' };
+
+  it('rejects a misspelled tenant key instead of leaving the tenant enabled', () => {
+    const result = HubConfigSchema.safeParse({
+      version: '1',
+      server,
+      tenants: [{ ...tenant, enable: false }],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.join('.') === 'tenants.0.enable')).toBe(true);
+    }
+  });
+
+  it('rejects a misspelled tls key', () => {
+    const result = HubConfigSchema.safeParse({
+      version: '1',
+      server: { ...server, tls: { hostname: ['localhost'] } },
+      tenants: [],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((i) => i.path.join('.') === 'server.tls.hostname')).toBe(
+        true,
+      );
+    }
+  });
+
+  it('still accepts "//" comment keys in tenant and tls entries', () => {
+    const result = HubConfigSchema.safeParse({
+      version: '1',
+      server: { ...server, tls: { '//': 'auto-mkcert', hostnames: ['localhost'] } },
+      tenants: [{ ...tenant, '//': 'my app' }],
+    });
+    expect(result.success).toBe(true);
+  });
+});
