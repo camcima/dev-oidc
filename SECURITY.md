@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-dev-oidc is a **development tool**. It is not suitable for production use. Tokens are signed by keys generated at startup and do not persist across restarts. No client authentication.
+dev-oidc is a **development tool**. It is not suitable for production use. Signing keys are generated at startup unless `signingKey.source` points at a key file. Client secrets are optional and exist so applications can exercise client authentication; they are stored in plain text in the config file and protect nothing of value.
 
 Nevertheless, if you find a security issue that could affect development workflows (e.g., a way to inject executable code via a malformed config file), please report it privately.
 

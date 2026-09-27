@@ -360,7 +360,7 @@ Rotate the key by either changing the `kid` (dev-oidc will refuse to load a file
 - `"oid"` — Entra / Azure AD convention. If your backend expects `oid`, set this.
 - Anything else — for custom integrations. The profile's `id` still lands in `sub` too; `subjectClaim` just adds an alias.
 
-Everything in `profile.claims` is merged into the issued JWT verbatim, with these reserved claim names protected from override: `sub`, `name`, `email`, `iat`, `exp`, `iss`, `aud`, `nonce`.
+Everything in `profile.claims` is merged into the issued JWT verbatim, except these reserved names, which dev-oidc manages itself: `sub`, `name`, `given_name`, `family_name`, `picture`, `locale`, `email`, `email_verified`, `hd`, `iat`, `exp`, `iss`, `aud`, `nonce`, `azp`, `at_hash`, `auth_time`, `scope`, `gty`, and the configured `subjectClaim`.
 
 ### Confidential clients
 
@@ -370,6 +370,8 @@ Two auth methods are accepted:
 
 - **`client_secret_post`** — include `client_secret` as a form field in the `POST /token` body.
 - **`client_secret_basic`** — HTTP Basic auth: `Authorization: Basic <base64(clientId:clientSecret)>`.
+
+A body `client_secret` is compared exactly as the form or JSON parser decoded it. The Basic header accepts the credentials either form-urlencoded, as RFC 6749 §2.3.1 specifies, or raw, since many tools skip the encoding.
 
 When the secret is missing or wrong, dev-oidc returns `401` with `WWW-Authenticate: Basic realm="dev-oidc"`.
 
@@ -404,7 +406,7 @@ File-backed key files written with `RS256` load unchanged when `alg` is `"RS256"
 
 The `scope` parameter is propagated end-to-end:
 
-- `/authorize` rejects requests whose `scope` does not include `openid` with `400 invalid_scope`.
+- `/authorize` rejects requests whose `scope` does not include `openid` by redirecting to the `redirect_uri` with `error=invalid_scope`. The `client_credentials` grant does not require `openid`.
 - The `/token` response `scope` field reflects the scope the client actually requested, not a hardcoded string.
 - Access tokens carry a `scope` claim with the same value.
 
@@ -430,9 +432,10 @@ In **Hub mode**, every OIDC route is namespaced under the tenant slug; replace `
 | `GET /`                                       | `GET /`                                 | Hub landing page (lists tenants).                        |
 | `GET /:slug/.well-known/openid-configuration` | `GET /.well-known/openid-configuration` | Discovery doc.                                           |
 | `GET /:slug/.well-known/jwks.json`            | `GET /.well-known/jwks.json`            | Public keys.                                             |
-| `GET /:slug/authorize`                        | `GET /authorize`                        | Renders the login page (tiles).                          |
+| `GET` / `POST /:slug/authorize`               | `GET` / `POST /authorize`               | Renders the login page (tiles).                          |
 | `POST /:slug/authorize/complete`              | `POST /authorize/complete`              | Issues an auth code.                                     |
-| `POST /:slug/token`                           | `POST /token`                           | Code exchange + refresh.                                 |
+| `POST /:slug/token`                           | `POST /token`                           | Code exchange, refresh, and `client_credentials`.        |
+| `GET` / `POST /:slug/userinfo`                | `GET` / `POST /userinfo`                | Claims of the signed-in user.                            |
 | `GET` / `POST /:slug/logout`                  | `GET` / `POST /logout`                  | Ends the session.                                        |
 | `GET /admin`                                  | `GET /admin`                            | Hub dashboard (Hub) / single admin page (Legacy/Docker). |
 | `GET /admin/:slug`                            | —                                       | Per-tenant admin UI (profile CRUD).                      |
@@ -443,9 +446,15 @@ The authorization-code flow uses **PKCE with S256**. No implicit flow. Client se
 
 **Authorization errors.** Once `client_id` and `redirect_uri` are validated, errors are delivered by redirecting to the registered `redirect_uri` with `error`, `error_description` and the original `state` (RFC 6749 §4.1.2.1). An unknown `client_id` or an unregistered `redirect_uri` still returns `400` — there is nowhere safe to redirect. A failed code exchange revokes the code, as production IdPs do.
 
+**Malformed requests.** A missing, repeated, or non-string parameter is answered with `invalid_request`, following the same redirect rule as other authorization errors. `/authorize` accepts its parameters as a GET query string or a form-encoded POST body (OIDC Core §3.1.2.1).
+
+**Token responses** carry `Cache-Control: no-store` and `Pragma: no-cache`, including errors (RFC 6749 §5.1).
+
+**UserInfo** serves only tokens issued to a person. `client_credentials` access tokens carry `gty: "client-credentials"` and are rejected with `invalid_token`, even when the client id matches a profile id.
+
 **Silent renew.** dev-oidc keeps no browser session, so `prompt=none` answers `error=login_required` immediately rather than rendering a login page into a hidden iframe. Relying parties fall back to an interactive redirect.
 
-CORS is permissive by default (`Access-Control-Allow-Origin` reflects the request's `Origin`) — browser-based OIDC clients can fetch the discovery doc, JWKS, and token endpoint without additional config.
+CORS allows loopback origins (`localhost`, `*.localhost`, `127.0.0.0/8`, `[::1]`), every origin that appears in a client's `redirectUris` or `postLogoutRedirectUris`, and the advertised public URL. Browser-based OIDC clients registered in the config can fetch the discovery doc, JWKS, and token endpoint without additional setup. Requests without an `Origin` header are unaffected.
 
 ---
 
@@ -454,12 +463,12 @@ CORS is permissive by default (`Access-Control-Allow-Origin` reflects the reques
 Visit `http://localhost:8095/admin` to:
 
 - View all configured profiles.
-- Add, edit, or delete profiles. Changes write atomically to the JSON config file on disk.
+- Add, edit, or delete profiles. Each change is applied to the config file as it currently is on disk and written atomically, so an edit you saved a moment earlier is kept. If the file does not validate at that moment, the admin API answers `409 config_invalid` and leaves it untouched.
 - View the full raw config.
 
 The admin UI subscribes to a Server-Sent Events stream at `/admin/events`. When the JSON config file is edited externally (by another tool, another human, or a coding agent), a "Config changed on disk" banner appears so you can reload.
 
-**No authentication on `/admin`** — the default `127.0.0.1` bind is the only protection. If you run dev-oidc somewhere network-reachable, put it behind a firewall, reverse-proxy auth, or a VPN. dev-oidc is a development tool, not a production service.
+**No authentication on `/admin`.** Admin routes reject requests whose `Host`, `Origin`, or `Sec-Fetch-Site` header points to another site, which stops DNS-rebinding and cross-site form attacks from a browser. Beyond that, the default `127.0.0.1` bind is the only protection. If you run dev-oidc somewhere network-reachable, put it behind a firewall, reverse-proxy auth, or a VPN. dev-oidc is a development tool, not a production service.
 
 From the login page itself, a small "Manage profiles →" link jumps to `/admin` for quick iteration.
 
@@ -483,7 +492,7 @@ Caveat: Google access tokens are opaque; dev-oidc's are signed JWTs (more useful
 - **Development only.** Not suitable for production use under any circumstances.
 - **Single tenant per Docker container.** The Docker image runs in legacy single-tenant mode. Use Hub mode (CLI) for multi-tenant local development.
 - **In-memory session state.** Authorization codes (60 s TTL) and refresh tokens (8 h default) are held in memory. A server restart invalidates all active codes and refresh tokens. Persistent session storage is intentionally out of scope. Signing keys can be persisted across restarts via `signingKey.source: "file:<path>"` (see [Signing-key persistence](#signing-key-persistence)).
-- **Partial config hot-reload.** Edits to `clients`, `profiles`, `branding`, `subjectClaim`, and `tokenTtlSeconds` apply on the next request after the file watcher fires. Edits to `signingKey` (kid/alg/source) and `refreshTokenTtlSeconds` require a process restart — or, in Hub mode, `dev-oidc unregister <slug> && dev-oidc register <path>` — because they're baked into the per-tenant key material and refresh-token store at activation time. Live-rotating a signing key would invalidate every JWT minted before the rotation; that's not a hot-reload behavior we want.
+- **Partial config hot-reload.** Edits to `clients`, `profiles`, `branding`, `subjectClaim`, `tokenTtlSeconds`, and `refreshTokenTtlSeconds` apply on the next request after the file watcher fires. A changed `refreshTokenTtlSeconds` applies to refresh tokens issued after the change; tokens already issued keep their expiry. Edits to `signingKey` (kid/alg/source) require a process restart — or, in Hub mode, `dev-oidc unregister <slug> && dev-oidc register <path>` — because they're baked into the per-tenant key material at activation time. Live-rotating a signing key would invalidate every JWT minted before the rotation; that's not a hot-reload behavior we want.
 - **Signing key rotates on every restart** unless `source: "file:<path>"` is set.
 - **No authentication on `/admin`.**
 - **Logout without redirect.** When `/logout` is called without a `post_logout_redirect_uri`, the server returns a 200 HTML "Signed out" page with a link back to `/`. If a registered `post_logout_redirect_uri` is provided, the normal 302 redirect applies.
@@ -494,10 +503,10 @@ Refreshing a token re-resolves the profile from the **current** config: the
 profile's identity fields, custom `claims`, `subjectClaim`, and the access/ID-token
 TTL (`tokenTtlSeconds`) are all read live, so editing a profile changes the claims
 of already-authorized sessions on their next refresh (deleting the profile
-invalidates them). The refresh token's own lifetime (`refreshTokenTtlSeconds`) is
-not re-read — it stays fixed at whatever was active when the tenant started (see
-the hot-reload limitation above). The **scope** is likewise fixed: it was set at
-the original `/authorize` request and is carried through refreshes unchanged. This
+invalidates them). Each refresh also issues a new refresh token whose lifetime
+comes from the current `refreshTokenTtlSeconds`; a token already issued keeps the
+expiry it was given. The **scope** is fixed: it was set at the original
+`/authorize` request and is carried through refreshes unchanged. This
 is deliberate test-double behavior, not how a production IdP treats an existing
 grant.
 
