@@ -4,22 +4,25 @@ import * as jose from 'jose';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import type { Client, Profile } from '@/config/schema.js';
 import { assembleClaims, CLIENT_CREDENTIALS_GTY } from '@/oidc/claims.js';
+import { invalidParamDescription, readParams } from '@/oidc/params.js';
 
 export interface TokenDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
   pathPrefix?: string;
 }
 
-interface TokenBody {
-  grant_type?: string;
-  scope?: string;
-  code?: string;
-  code_verifier?: string;
-  redirect_uri?: string;
-  client_id?: string;
-  client_secret?: string;
-  refresh_token?: string;
-}
+const TOKEN_PARAMS = [
+  'grant_type',
+  'scope',
+  'code',
+  'code_verifier',
+  'redirect_uri',
+  'client_id',
+  'client_secret',
+  'refresh_token',
+] as const;
+
+type TokenBody = Partial<Record<(typeof TOKEN_PARAMS)[number], string>>;
 
 function s256(input: string): string {
   return createHash('sha256').update(input).digest('base64url');
@@ -30,9 +33,10 @@ interface ExtractedCreds {
   /**
    * Candidate secrets to test. RFC 6749 §2.3.1 says Basic-auth credentials are
    * form-urlencoded before base64, and spec-conformant clients encode them —
-   * but plenty of tools send the raw bytes. Both readings are offered so a
-   * secret containing reserved characters works either way; each is compared
-   * against the configured value, so accepting two candidates leaks nothing.
+   * but plenty of tools send the raw bytes. Both readings of the header are
+   * offered so a secret containing reserved characters works either way. A
+   * body secret was already decoded by the form or JSON parser, so it is the
+   * one and only candidate: decoding it again accepted wrong secrets.
    */
   secrets: string[];
   conflict?: boolean;
@@ -81,7 +85,12 @@ function extractClientCredentials(request: FastifyRequest, body: TokenBody): Ext
 
   return {
     clientId: basicIdDecoded ?? formId,
-    secrets: basicSecret !== undefined ? candidates(basicSecret) : candidates(formSecret),
+    secrets:
+      basicSecret !== undefined
+        ? candidates(basicSecret)
+        : formSecret !== undefined
+          ? [formSecret]
+          : [],
   };
 }
 
@@ -104,7 +113,14 @@ export function registerToken(app: FastifyInstance, deps: TokenDeps): void {
   const prefix = deps.pathPrefix ?? '';
   app.post(`${prefix}/token`, async (request, reply) => {
     const tenant = deps.getTenant(request);
-    const body = request.body as TokenBody;
+    const read = readParams(request.body, TOKEN_PARAMS);
+    if (!read.ok) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: invalidParamDescription(read.invalid),
+      });
+    }
+    const body: TokenBody = read.params;
     const creds = extractClientCredentials(request, body);
     if (creds.conflict) {
       return reply.code(400).send({

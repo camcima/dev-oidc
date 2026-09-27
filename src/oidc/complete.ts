@@ -1,21 +1,24 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
+import { invalidParamDescription, readParams } from '@/oidc/params.js';
 
 export interface CompleteDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
   pathPrefix?: string;
 }
 
-interface CompleteBody {
-  pendingAuthId?: string;
-  profileId?: string;
-}
-
 export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void {
   const prefix = deps.pathPrefix ?? '';
   app.post(`${prefix}/authorize/complete`, async (request, reply) => {
     const tenant = deps.getTenant(request);
-    const body = request.body as CompleteBody;
+    const read = readParams(request.body, ['pendingAuthId', 'profileId']);
+    if (!read.ok) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: invalidParamDescription(read.invalid),
+      });
+    }
+    const body = read.params;
     const config = tenant.runtime.get();
 
     if (!body.pendingAuthId || !body.profileId) {

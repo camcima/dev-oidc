@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Client } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { renderLoginPage } from '@/login/page.js';
+import { invalidParamDescription, readParams } from '@/oidc/params.js';
 
 export interface AuthorizeDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -10,17 +11,17 @@ export interface AuthorizeDeps {
   adminPath?: (slug: string) => string;
 }
 
-interface AuthorizeQuery {
-  client_id?: string;
-  redirect_uri?: string;
-  response_type?: string;
-  scope?: string;
-  state?: string;
-  nonce?: string;
-  prompt?: string;
-  code_challenge?: string;
-  code_challenge_method?: string;
-}
+const AUTHORIZE_PARAMS = [
+  'client_id',
+  'redirect_uri',
+  'response_type',
+  'scope',
+  'state',
+  'nonce',
+  'prompt',
+  'code_challenge',
+  'code_challenge_method',
+] as const;
 
 /**
  * Delivers an authorization error the way RFC 6749 §4.1.2.1 requires: by
@@ -57,26 +58,39 @@ function pkceRequired(client: Client): boolean {
 
 export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): void {
   const prefix = deps.pathPrefix ?? '';
-  app.get(`${prefix}/authorize`, async (request, reply) => {
+  // OIDC Core §3.1.2.1: the same request may arrive as a GET query string or
+  // a form-encoded POST body.
+  const handle = async (
+    request: FastifyRequest,
+    reply: FastifyReply,
+    source: unknown,
+  ): Promise<FastifyReply> => {
     const tenant = deps.getTenant(request);
-    const query = request.query as AuthorizeQuery;
     const config = tenant.runtime.get();
 
     // Until client_id and redirect_uri are both validated there is nowhere
     // safe to send the user, so these two stay direct 400s per the RFC.
-    if (!query.client_id) {
+    const target = readParams(source, ['client_id', 'redirect_uri']);
+    if (!target.ok) {
+      return reply.code(400).send({
+        error: 'invalid_request',
+        error_description: invalidParamDescription(target.invalid),
+      });
+    }
+    const { client_id: clientId, redirect_uri: requestedRedirect } = target.params;
+    if (!clientId) {
       return reply
         .code(400)
         .send({ error: 'invalid_request', error_description: 'client_id is required' });
     }
-    const client = config.clients.find((c) => c.clientId === query.client_id);
+    const client = config.clients.find((c) => c.clientId === clientId);
     if (!client) {
       return reply
         .code(400)
         .send({ error: 'invalid_client', error_description: 'unknown client_id' });
     }
 
-    if (!query.redirect_uri || !client.redirectUris.includes(query.redirect_uri)) {
+    if (!requestedRedirect || !client.redirectUris.includes(requestedRedirect)) {
       return reply.code(400).send({
         error: 'invalid_request',
         error_description: 'redirect_uri does not match a registered value',
@@ -85,10 +99,19 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
 
     // Resolve from the config allowlist rather than reusing the request value,
     // so only config-sourced data reaches the Location header.
-    const redirectUri = client.redirectUris.find((u) => u === query.redirect_uri)!;
-    const state = query.state;
+    const redirectUri = client.redirectUris.find((u) => u === requestedRedirect)!;
+    // A repeated state cannot be echoed faithfully, so it is dropped from the
+    // error redirect rather than guessed at.
+    const stateRead = readParams(source, ['state']);
+    const state = stateRead.ok ? stateRead.params.state : undefined;
     const fail = (error: string, description?: string): FastifyReply =>
       errorRedirect(reply, redirectUri, error, description, state);
+
+    const all = readParams(source, AUTHORIZE_PARAMS);
+    if (!all.ok) {
+      return fail('invalid_request', invalidParamDescription(all.invalid));
+    }
+    const query = all.params;
 
     if (!query.response_type) {
       return fail('invalid_request', 'response_type is required');
@@ -149,5 +172,8 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
     });
 
     return reply.code(200).type('text/html; charset=utf-8').send(html);
-  });
+  };
+
+  app.get(`${prefix}/authorize`, (request, reply) => handle(request, reply, request.query));
+  app.post(`${prefix}/authorize`, (request, reply) => handle(request, reply, request.body));
 }
