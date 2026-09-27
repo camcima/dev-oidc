@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0](https://github.com/camcima/dev-oidc/compare/v0.6.0...v0.7.0) (2026-09-27)
+
+### ⚠ BREAKING CHANGES
+
+* **oidc:** /userinfo now answers 401 invalid_token for access tokens
+  issued by the client_credentials grant. gty is a reserved claim name, so a
+  profile custom claim called gty is no longer copied into tokens.
+* **oidc:** a client_secret sent in a form or JSON body must now match
+  the configured secret exactly. A client that encoded the secret a second time
+  in the body now gets 401 invalid_client. The Authorization: Basic header still
+  accepts encoded or raw credentials.
+* **config:** a project config or hub.json containing an unrecognized
+  key inside a client, signingKey, profile, branding, tenant or tls object
+  now fails validation instead of loading with that key ignored. Remove or
+  correct the key.
+
+### Bug Fixes
+
+* **admin:** build profile mutations on the file, not the runtime snapshot ([ba2d9f3](https://github.com/camcima/dev-oidc/commit/ba2d9f3d64fd1a085cf90f7bb2b73e6a56c04163))
+* **admin:** guard percent-encoded admin paths ([8a2b55d](https://github.com/camcima/dev-oidc/commit/8a2b55d4b428ce1f781f936f0cb09d358fb401bb))
+* bracket IPv6 listen hosts in every URL authority ([46ab9a7](https://github.com/camcima/dev-oidc/commit/46ab9a733ac828ebf8170421803e69f2c3cb789d))
+* **config:** reject unknown keys in nested config objects ([6c86358](https://github.com/camcima/dev-oidc/commit/6c8635835093b31ee46327b84d79ea81fae0d8fb))
+* **deps:** override esbuild to a non-vulnerable version ([#25](https://github.com/camcima/dev-oidc/issues/25)) ([a5c884c](https://github.com/camcima/dev-oidc/commit/a5c884cd082667bb234a7f10c3ed43603394ad7a))
+* **hub:** apply reconciles and shutdown in call order ([a7b424b](https://github.com/camcima/dev-oidc/commit/a7b424b8840c6a7b8d896a7b3b94f005fe706a54))
+* **oidc:** refuse client_credentials tokens at userinfo ([e40f6e2](https://github.com/camcima/dev-oidc/commit/e40f6e29461ade84c7b5eef9d4782bcb364fc353))
+* **oidc:** send no-store headers on token responses ([f11d729](https://github.com/camcima/dev-oidc/commit/f11d729f814881e53a574287aa47073f4331031c))
+* **oidc:** validate protocol parameters and accept POST /authorize ([fcdfd36](https://github.com/camcima/dev-oidc/commit/fcdfd3616d34868965ef494ad749ab7b416b4973))
+
+### Documentation
+
+* add the September review and correct stale docs ([4f69f1b](https://github.com/camcima/dev-oidc/commit/4f69f1bd70a19813683f85eb3d844817cf063c1e))
+
 ## [0.6.0] - 2026-08-19
 
 ### Added
