@@ -12,6 +12,13 @@ updates:
       # until typescript-eslint ships TS 7 support, then bump both together.
       - dependency-name: 'typescript'
         update-types: ['version-update:semver-major']
+      # Held by maintainer (2026-10): remove this entry to resume updates
+      - dependency-name: '@types/node'
+      # chokidar 6 requires Node >=22.22, which would raise the package's
+      # minimum Node version (engines.node is >=22.0.0). Hold the major until
+      # the Node floor is raised deliberately.
+      - dependency-name: 'chokidar'
+        update-types: ['version-update:semver-major']
     groups:
       production-dependencies:
         dependency-type: 'production'
