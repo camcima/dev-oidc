@@ -235,3 +235,137 @@ describe('prompt=none', () => {
     await app.close();
   });
 });
+
+/** Reads the authorization response parameters from whichever channel `mode` uses. */
+function responseParams(
+  res: { statusCode: number; headers: Record<string, unknown>; payload: string },
+  mode: 'query' | 'fragment' | 'form_post',
+): URLSearchParams {
+  if (mode === 'form_post') {
+    expect(res.statusCode).toBe(200);
+    expect(res.payload).toContain(`action="${REDIRECT_URI}"`);
+    const out = new URLSearchParams();
+    for (const m of res.payload.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) {
+      out.append(m[1]!, m[2]!);
+    }
+    return out;
+  }
+  expect(res.statusCode).toBe(302);
+  const location = new URL(res.headers.location as string);
+  expect(location.origin + location.pathname).toBe(REDIRECT_URI);
+  if (mode === 'fragment') {
+    expect(location.search).toBe('');
+    return new URLSearchParams(location.hash.slice(1));
+  }
+  expect(location.hash).toBe('');
+  return location.searchParams;
+}
+
+describe('response_mode delivers errors in the requested channel', () => {
+  const cases: Array<[string, Record<string, string | null>, string]> = [
+    ['response_type=token', { response_type: 'token' }, 'unsupported_response_type'],
+    ['a scope without openid', { scope: 'profile' }, 'invalid_scope'],
+    ['a missing PKCE challenge', { code_challenge: null }, 'invalid_request'],
+    ['prompt=none', { prompt: 'none' }, 'login_required'],
+  ];
+
+  for (const mode of ['query', 'fragment', 'form_post'] as const) {
+    for (const [label, overrides, error] of cases) {
+      it(`${mode}: ${label} answers ${error} with state echoed`, async () => {
+        const { app } = buildApp();
+        const res = await authorize(app, params({ ...overrides, response_mode: mode }));
+
+        const out = responseParams(res, mode);
+        expect(out.get('error')).toBe(error);
+        expect(out.get('state')).toBe('st-1');
+        await app.close();
+      });
+    }
+  }
+
+  it('fragment keeps an existing redirect_uri query untouched', async () => {
+    const withQuery = 'http://localhost:5173/auth/callback?tenant=acme';
+    const { app } = buildApp([client({ redirectUris: [withQuery] })]);
+    const res = await authorize(
+      app,
+      params({ response_type: 'token', redirect_uri: withQuery, response_mode: 'fragment' }),
+    );
+
+    expect(res.statusCode).toBe(302);
+    const location = new URL(res.headers.location as string);
+    expect(location.search).toBe('?tenant=acme');
+    expect(new URLSearchParams(location.hash.slice(1)).get('error')).toBe(
+      'unsupported_response_type',
+    );
+    await app.close();
+  });
+
+  it('an empty response_mode means query', async () => {
+    const { app } = buildApp();
+    const res = await authorize(app, params({ response_type: 'token', response_mode: '' }));
+
+    expect(responseParams(res, 'query').get('error')).toBe('unsupported_response_type');
+    await app.close();
+  });
+
+  it('an unknown response_mode answers invalid_request in the query', async () => {
+    const { app } = buildApp();
+    const res = await authorize(app, params({ response_mode: 'bogus' }));
+
+    const out = responseParams(res, 'query');
+    expect(out.get('error')).toBe('invalid_request');
+    expect(out.get('error_description')).toContain('response_mode');
+    expect(out.get('state')).toBe('st-1');
+    await app.close();
+  });
+
+  it('an unknown response_mode wins over later errors', async () => {
+    const { app } = buildApp();
+    const res = await authorize(app, params({ response_mode: 'bogus', response_type: 'token' }));
+
+    expect(responseParams(res, 'query').get('error')).toBe('invalid_request');
+    await app.close();
+  });
+
+  it('a repeated response_mode answers invalid_request in the query', async () => {
+    const { app } = buildApp();
+    const res = await authorize(app, `${params()}&response_mode=fragment&response_mode=form_post`);
+
+    const out = responseParams(res, 'query');
+    expect(out.get('error')).toBe('invalid_request');
+    expect(out.get('error_description')).toContain('response_mode');
+    await app.close();
+  });
+
+  it('drops a repeated state from a fragment error', async () => {
+    const { app } = buildApp();
+    const res = await authorize(
+      app,
+      `${params({ response_type: 'token', response_mode: 'fragment' })}&state=st-2`,
+    );
+
+    const out = responseParams(res, 'fragment');
+    expect(out.get('error')).toBe('invalid_request');
+    expect(out.has('state')).toBe(false);
+    await app.close();
+  });
+
+  it('carries the response mode onto the pending record', async () => {
+    const { app, pending } = buildApp();
+    const res = await authorize(app, params({ response_mode: 'form_post' }));
+
+    expect(res.statusCode).toBe(200);
+    const id = res.payload.match(/name="pendingAuthId"[^>]*value="([^"]+)"/)![1]!;
+    expect(pending.consume(id)?.responseMode).toBe('form_post');
+    await app.close();
+  });
+
+  it('records query on the pending record when response_mode is absent', async () => {
+    const { app, pending } = buildApp();
+    const res = await authorize(app, params());
+
+    const id = res.payload.match(/name="pendingAuthId"[^>]*value="([^"]+)"/)![1]!;
+    expect(pending.consume(id)?.responseMode).toBe('query');
+    await app.close();
+  });
+});

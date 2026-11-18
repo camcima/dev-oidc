@@ -446,6 +446,8 @@ The authorization-code flow uses **PKCE with S256**. No implicit flow. Client se
 
 **Authorization errors.** Once `client_id` and `redirect_uri` are validated, errors are delivered by redirecting to the registered `redirect_uri` with `error`, `error_description` and the original `state` (RFC 6749 §4.1.2.1). An unknown `client_id` or an unregistered `redirect_uri` still returns `400` — there is nowhere safe to redirect. A failed code exchange revokes the code, as production IdPs do.
 
+**Response modes.** `/authorize` honours the `response_mode` parameter for both the authorization code and authorization errors: `query` (the default when `response_mode` is absent or empty), `fragment` (parameters in the redirect URI's `#fragment`, as MSAL requests by default), and `form_post` (an auto-submitting HTML form that POSTs the parameters to the redirect URI). Any other value, or a repeated `response_mode`, is answered with `invalid_request` in the query. Discovery advertises `response_modes_supported: ["query", "fragment", "form_post"]`.
+
 **Malformed requests.** A missing, repeated, or non-string parameter is answered with `invalid_request`, following the same redirect rule as other authorization errors. `/authorize` accepts its parameters as a GET query string or a form-encoded POST body (OIDC Core §3.1.2.1).
 
 **Token responses** carry `Cache-Control: no-store` and `Pragma: no-cache`, including errors (RFC 6749 §5.1).

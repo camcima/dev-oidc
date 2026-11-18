@@ -1,3 +1,5 @@
+import { RESPONSE_MODES } from '@/oidc/response-mode.js';
+
 export interface DiscoveryDocument {
   issuer: string;
   authorization_endpoint: string;
@@ -60,7 +62,7 @@ export function buildDiscoveryDocument(input: DiscoveryInput): DiscoveryDocument
     userinfo_endpoint: `${issuer}/userinfo`,
     claims_supported: claimsSupported,
     response_types_supported: ['code'],
-    response_modes_supported: ['query'],
+    response_modes_supported: RESPONSE_MODES,
     grant_types_supported: ['authorization_code', 'refresh_token', 'client_credentials'],
     subject_types_supported: ['public'],
     code_challenge_methods_supported: ['S256'],

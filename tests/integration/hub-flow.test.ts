@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import * as jose from 'jose';
 import { describe, expect, it } from 'vitest';
 import { createHubServer } from '@/hub/server.js';
+import { runResponseModeFlow } from '../shared/response-mode-flow.js';
 import { makeTmpDir } from '../shared/tmp-dir.js';
 
 function pkcePair() {
@@ -108,6 +109,28 @@ describe('integration: hub mode auth-code flow', () => {
       await server.close();
     }
   });
+
+  for (const responseMode of ['fragment', 'form_post'] as const) {
+    it(`completes the flow with response_mode=${responseMode} under a tenant slug`, async () => {
+      const cfg = tmpProjectConfig();
+      const hubCfg = tmpHubConfig([{ slug: 'app', configPath: cfg }]);
+      const server = await createHubServer({ hubConfigPath: hubCfg });
+      try {
+        const result = await runResponseModeFlow(server.app, {
+          prefix: '/app',
+          clientId: 'my-app',
+          redirectUri: 'http://localhost:5173/cb',
+          profileId: 'bob',
+          responseMode,
+        });
+        expect(result.tokenStatus).toBe(200);
+        expect(result.tokens.access_token).toBeTruthy();
+        expect(result.tokens.id_token).toBeTruthy();
+      } finally {
+        await server.close();
+      }
+    });
+  }
 
   it('returns 404 for unknown slug', async () => {
     const hubCfg = tmpHubConfig([]);

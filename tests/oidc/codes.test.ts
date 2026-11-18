@@ -207,6 +207,7 @@ describe('PendingAuthStore', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
+      responseMode: 'query',
     });
 
     const rec = store.consume(id);
@@ -222,6 +223,7 @@ describe('PendingAuthStore', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
+      responseMode: 'query',
     };
   }
 

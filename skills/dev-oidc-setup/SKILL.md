@@ -495,6 +495,8 @@ const msalConfig: Configuration = {
 
 The user's authority value still comes from env so production paths point at Entra unchanged — but `knownAuthorities` and `protocolMode` are unconditional in the source. Edit the MSAL config file when wiring an MSAL app at dev-oidc; this is one of the few cases where the wire-up legitimately requires touching application code.
 
+**No `response_mode` workaround needed.** MSAL sends `response_mode=fragment` by default (Entra honors it), and dev-oidc does too: the code, `state`, and errors such as `login_required` from a `prompt=none` silent iframe come back in the URL fragment where MSAL looks for them. Don't add a client-side shim that moves `?code=…&state=…` into the hash, and don't override MSAL's response mode — `knownAuthorities` and `protocolMode: 'OIDC'` are the only MSAL changes required. (dev-oidc v0.7.0 and earlier ignored `response_mode` and always answered in the query; a shim added for those versions can be removed.)
+
 ## The browser-vs-server URL split
 
 This is the most common gotcha when wiring dev-oidc into a compose-based stack and worth getting right on the first pass.

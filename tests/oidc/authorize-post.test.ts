@@ -75,6 +75,81 @@ describe('POST /authorize', () => {
     }
   });
 
+  it('honours response_mode=fragment for a form-encoded error', async () => {
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
+    try {
+      const res = await server.app.inject({
+        method: 'POST',
+        url: '/authorize',
+        headers: FORM,
+        payload: form({ response_type: 'token', response_mode: 'fragment' }),
+      });
+      expect(res.statusCode).toBe(302);
+      const loc = new URL(res.headers.location as string);
+      expect(loc.search).toBe('');
+      const fragment = new URLSearchParams(loc.hash.slice(1));
+      expect(fragment.get('error')).toBe('unsupported_response_type');
+      expect(fragment.get('state')).toBe('s1');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('honours response_mode=form_post for a form-encoded error', async () => {
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
+    try {
+      const res = await server.app.inject({
+        method: 'POST',
+        url: '/authorize',
+        headers: FORM,
+        payload: form({ prompt: 'none', response_mode: 'form_post' }),
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.payload).toContain(`<form method="post" action="${REDIRECT}">`);
+      expect(res.payload).toContain('<input type="hidden" name="error" value="login_required">');
+      expect(res.payload).toContain('<input type="hidden" name="state" value="s1">');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('answers an unknown response_mode with invalid_request in the query', async () => {
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
+    try {
+      const res = await server.app.inject({
+        method: 'POST',
+        url: '/authorize',
+        headers: FORM,
+        payload: form({ response_mode: 'bogus' }),
+      });
+      expect(res.statusCode).toBe(302);
+      const loc = new URL(res.headers.location as string);
+      expect(loc.searchParams.get('error')).toBe('invalid_request');
+      expect(loc.searchParams.get('error_description')).toContain('response_mode');
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('answers a repeated response_mode with invalid_request', async () => {
+    const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
+    try {
+      const res = await server.app.inject({
+        method: 'POST',
+        url: '/authorize',
+        headers: FORM,
+        payload: `${form()}&response_mode=query&response_mode=fragment`,
+      });
+      expect(res.statusCode).toBe(302);
+      const loc = new URL(res.headers.location as string);
+      expect(loc.searchParams.get('error')).toBe('invalid_request');
+      expect(loc.searchParams.get('error_description')).toContain('response_mode');
+    } finally {
+      await server.close();
+    }
+  });
+
   it('works under a hub tenant prefix', async () => {
     const dir = makeTmpDir('dev-oidc-authz-post-');
     const cfg = path.join(dir, 'dev-oidc.config.json');

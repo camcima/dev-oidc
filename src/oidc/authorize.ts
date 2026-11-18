@@ -3,6 +3,11 @@ import type { Client } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { renderLoginPage } from '@/login/page.js';
 import { invalidParamDescription, readParams } from '@/oidc/params.js';
+import {
+  deliverAuthorizationResponse,
+  parseResponseMode,
+  type ResponseMode,
+} from '@/oidc/response-mode.js';
 
 export interface AuthorizeDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -19,32 +24,34 @@ const AUTHORIZE_PARAMS = [
   'state',
   'nonce',
   'prompt',
+  'response_mode',
   'code_challenge',
   'code_challenge_method',
 ] as const;
 
 /**
- * Delivers an authorization error the way RFC 6749 §4.1.2.1 requires: by
- * redirecting to the client's registered redirect_uri with `error` (plus
- * `state`) rather than answering JSON. Returning JSON meant the relying
- * party's own error-callback path was never exercised against dev-oidc, and
- * a browser user saw a raw error object instead of their app's error page.
+ * Delivers an authorization error the way RFC 6749 §4.1.2.1 requires: back to
+ * the client's registered redirect_uri with `error` (plus `state`) rather than
+ * answering JSON, in the response mode the client asked for. Returning JSON
+ * meant the relying party's own error-callback path was never exercised
+ * against dev-oidc, and a browser user saw a raw error object instead of
+ * their app's error page.
  *
  * `redirectUri` is always the value matched against client.redirectUris, so
- * nothing request-controlled reaches the Location header.
+ * nothing request-controlled reaches the Location header or form action.
  */
 function errorRedirect(
   reply: FastifyReply,
   redirectUri: string,
+  mode: ResponseMode,
   error: string,
   description: string | undefined,
   state: string | undefined,
 ): FastifyReply {
-  const url = new URL(redirectUri);
-  url.searchParams.set('error', error);
-  if (description !== undefined) url.searchParams.set('error_description', description);
-  if (state !== undefined && state !== '') url.searchParams.set('state', state);
-  return reply.code(302).header('location', url.toString()).send();
+  const params: Record<string, string> = { error };
+  if (description !== undefined) params.error_description = description;
+  if (state !== undefined && state !== '') params.state = state;
+  return deliverAuthorizationResponse(reply, redirectUri, params, mode);
 }
 
 /**
@@ -104,8 +111,34 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
     // error redirect rather than guessed at.
     const stateRead = readParams(source, ['state']);
     const state = stateRead.ok ? stateRead.params.state : undefined;
+
+    // Resolve the response mode before any other check so every later error
+    // reaches the client where it is listening (MSAL reads only the fragment).
+    // A mode that cannot be resolved is itself reported in the default mode.
+    const modeRead = readParams(source, ['response_mode']);
+    if (!modeRead.ok) {
+      return errorRedirect(
+        reply,
+        redirectUri,
+        'query',
+        'invalid_request',
+        invalidParamDescription(modeRead.invalid),
+        state,
+      );
+    }
+    const responseMode: ResponseMode | null = parseResponseMode(modeRead.params.response_mode);
+    if (responseMode === null) {
+      return errorRedirect(
+        reply,
+        redirectUri,
+        'query',
+        'invalid_request',
+        'response_mode must be one of query, fragment, form_post',
+        state,
+      );
+    }
     const fail = (error: string, description?: string): FastifyReply =>
-      errorRedirect(reply, redirectUri, error, description, state);
+      errorRedirect(reply, redirectUri, responseMode, error, description, state);
 
     const all = readParams(source, AUTHORIZE_PARAMS);
     if (!all.ok) {
@@ -158,6 +191,7 @@ export function registerAuthorize(app: FastifyInstance, deps: AuthorizeDeps): vo
       nonce: query.nonce ?? '',
       state: state ?? '',
       scope: requestedScope,
+      responseMode,
     });
 
     // Resolve the concrete action URL: if the prefix contains a :slug param,
