@@ -63,6 +63,7 @@ describe('POST /authorize/complete', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
+      responseMode: 'query',
     });
 
     const res = await app.inject({
@@ -90,6 +91,7 @@ describe('POST /authorize/complete', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
+      responseMode: 'query',
     });
 
     const res = await app.inject({
@@ -127,6 +129,7 @@ describe('POST /authorize/complete', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid',
+      responseMode: 'query',
     });
 
     const res = await app.inject({
@@ -148,6 +151,7 @@ describe('POST /authorize/complete', () => {
       nonce: 'n1',
       state: 's1',
       scope: 'openid email custom_scope',
+      responseMode: 'query',
     });
 
     const res = await app.inject({
@@ -162,5 +166,73 @@ describe('POST /authorize/complete', () => {
     const record = codes.consume(codeMatch![1]!);
     expect(record?.scope).toBe('openid email custom_scope');
     await app.close();
+  });
+
+  describe('response_mode', () => {
+    function createPending(
+      pending: Awaited<ReturnType<typeof buildApp>>['pending'],
+      responseMode: 'query' | 'fragment' | 'form_post',
+    ): string {
+      return pending.create({
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:5173/auth/callback',
+        codeChallenge: 'xyz',
+        nonce: 'n1',
+        state: 's1',
+        scope: 'openid',
+        responseMode,
+      });
+    }
+
+    async function complete(app: Awaited<ReturnType<typeof buildApp>>['app'], id: string) {
+      return app.inject({
+        method: 'POST',
+        url: '/authorize/complete',
+        payload: `pendingAuthId=${id}&profileId=alice`,
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      });
+    }
+
+    it('query keeps the exact pre-response_mode Location (regression guard)', async () => {
+      const { app, pending } = await buildApp();
+      const res = await complete(app, createPending(pending, 'query'));
+
+      expect(res.statusCode).toBe(302);
+      expect(res.headers.location).toMatch(
+        /^http:\/\/localhost:5173\/auth\/callback\?code=[A-Za-z0-9_-]+&state=s1$/,
+      );
+      await app.close();
+    });
+
+    it('fragment puts code and state in the fragment', async () => {
+      const { app, pending, codes } = await buildApp();
+      const res = await complete(app, createPending(pending, 'fragment'));
+
+      expect(res.statusCode).toBe(302);
+      const url = new URL(res.headers.location as string);
+      expect(url.origin + url.pathname).toBe('http://localhost:5173/auth/callback');
+      expect(url.search).toBe('');
+      const fragment = new URLSearchParams(url.hash.slice(1));
+      expect(fragment.get('state')).toBe('s1');
+      expect(codes.consume(fragment.get('code')!)?.profileId).toBe('alice');
+      await app.close();
+    });
+
+    it('form_post answers an auto-submitting form carrying code and state', async () => {
+      const { app, pending, codes } = await buildApp();
+      const res = await complete(app, createPending(pending, 'form_post'));
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toBe('text/html; charset=utf-8');
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.headers.location).toBeUndefined();
+      expect(res.payload).toContain(
+        '<form method="post" action="http://localhost:5173/auth/callback">',
+      );
+      expect(res.payload).toContain('<input type="hidden" name="state" value="s1">');
+      const code = res.payload.match(/name="code" value="([^"]+)"/)![1]!;
+      expect(codes.consume(code)?.profileId).toBe('alice');
+      await app.close();
+    });
   });
 });

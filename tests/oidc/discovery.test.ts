@@ -94,6 +94,6 @@ describe('discovery advertises the full grant and response-mode surface', () => 
       signingAlg: 'RS256',
       authMethods: ['none'],
     });
-    expect(doc.response_modes_supported).toEqual(['query']);
+    expect(doc.response_modes_supported).toEqual(['query', 'fragment', 'form_post']);
   });
 });

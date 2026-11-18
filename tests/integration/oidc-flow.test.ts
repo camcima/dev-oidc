@@ -3,6 +3,7 @@ import * as jose from 'jose';
 import { describe, expect, it } from 'vitest';
 import type { Config } from '@/config/schema.js';
 import { createDevOidcServer } from '@/server.js';
+import { runResponseModeFlow } from '../shared/response-mode-flow.js';
 
 function pkcePair() {
   const verifier = randomBytes(32).toString('base64url');
@@ -121,6 +122,26 @@ describe('integration: full auth-code + PKCE flow', () => {
       await server.close();
     }
   });
+
+  for (const responseMode of ['fragment', 'form_post'] as const) {
+    it(`completes the flow with response_mode=${responseMode}`, async () => {
+      const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });
+      try {
+        const result = await runResponseModeFlow(server.app, {
+          prefix: '',
+          clientId: 'my-app',
+          redirectUri: 'http://localhost:5173/auth/callback',
+          profileId: 'bob',
+          responseMode,
+        });
+        expect(result.tokenStatus).toBe(200);
+        expect(result.tokens.access_token).toBeTruthy();
+        expect(result.tokens.id_token).toBeTruthy();
+      } finally {
+        await server.close();
+      }
+    });
+  }
 
   it('discovery document links to all endpoints', async () => {
     const server = await createDevOidcServer({ config, issuer: 'http://localhost:8095' });

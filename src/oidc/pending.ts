@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { DEFAULT_MAX_ENTRIES, type Entry, evictForInsert } from '@/oidc/expiring-map.js';
+import type { ResponseMode } from '@/oidc/response-mode.js';
 
 /** How long a rendered login page stays submittable. */
 export const DEFAULT_PENDING_TTL_MS = 10 * 60_000;
@@ -12,6 +13,8 @@ export interface PendingAuth {
   nonce: string;
   state: string;
   scope: string;
+  /** How /authorize/complete delivers the code; resolved from `response_mode`. */
+  responseMode: ResponseMode;
 }
 
 export interface PendingAuthStoreOptions {

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { invalidParamDescription, readParams } from '@/oidc/params.js';
+import { deliverAuthorizationResponse } from '@/oidc/response-mode.js';
 
 export interface CompleteDeps {
   getTenant: (req: FastifyRequest) => ActiveTenantState;
@@ -62,11 +63,10 @@ export function registerComplete(app: FastifyInstance, deps: CompleteDeps): void
       authTime: Math.floor(Date.now() / 1000),
     });
 
-    // allowedUri is sourced directly from client.redirectUris (config constant).
-    const url = new URL(allowedUri);
-    url.searchParams.set('code', code);
-    if (pending.state) url.searchParams.set('state', pending.state);
-
-    return reply.code(302).header('location', url.toString()).send();
+    const params: Record<string, string> = { code };
+    if (pending.state) params.state = pending.state;
+    // allowedUri is sourced directly from client.redirectUris (config constant),
+    // so it alone reaches the Location header or the form_post action.
+    return deliverAuthorizationResponse(reply, allowedUri, params, pending.responseMode);
   });
 }
