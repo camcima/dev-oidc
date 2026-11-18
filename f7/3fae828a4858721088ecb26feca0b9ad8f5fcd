@@ -1,0 +1,22 @@
+skills/dev-oidc-setup/SKILL.md
+  s_3bb4399e6eb111::t_6e65b1011619bc 498
+  s_3bb4399e6eb111::t_bde9cdef333984 499
+README.md
+  s_3bb4399e6eb111::t_bde9cdef333984 449-450
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "f73fae828a4858721088ecb26feca0b9ad8f5fcd",
+  "prompts": {},
+  "sessions": {
+    "s_3bb4399e6eb111": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "649c7314-41a3-473e-af93-fee0bf4c848f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Carlos Cima <camcima@users.noreply.github.com>"
+    }
+  }
+}
