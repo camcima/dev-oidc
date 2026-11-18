@@ -1,0 +1,50 @@
+tests/oidc/authorize-post.test.ts
+  s_3bb4399e6eb111::t_e8e2b1ff87bd6c 78-152
+src/oidc/pending.ts
+  s_3bb4399e6eb111::t_a867088a5f1f0b 3,16-17
+tests/integration/oidc-flow.test.ts
+  s_3bb4399e6eb111::t_4d3241e79b2e18 6,126-144
+  s_3bb4399e6eb111::t_ef53747b985965 145
+tests/integration/hub-flow.test.ts
+  s_3bb4399e6eb111::t_4d3241e79b2e18 7,113-133
+  s_3bb4399e6eb111::t_851fbe6e01aa2a 134
+tests/oidc/discovery.test.ts
+  s_3bb4399e6eb111::t_e8e2b1ff87bd6c 97
+tests/oidc/response-mode.test.ts
+  s_3bb4399e6eb111::t_a4197e18382a8c 1-63,65-83
+  s_3bb4399e6eb111::t_a84d3f23d4ba49 64
+tests/shared/response-mode-flow.ts
+  s_3bb4399e6eb111::t_4d3241e79b2e18 1-93
+tests/oidc/codes.test.ts
+  s_3bb4399e6eb111::t_7efac8de22f139 210,226
+src/oidc/response-mode.ts
+  s_3bb4399e6eb111::t_93360eb445e12f 1-80
+src/oidc/complete.ts
+  s_3bb4399e6eb111::t_f850451203aa9c 4,66-70
+src/oidc/authorize.ts
+  s_3bb4399e6eb111::t_7939f81090ca2c 6-10,27,33-38,41,46,51-54,114-139,141,194
+tests/oidc/authorize-errors.test.ts
+  s_3bb4399e6eb111::t_281d566b7382ec 332
+  s_3bb4399e6eb111::t_e9c7cd7f587986 238-331,333-371
+tests/oidc/complete.test.ts
+  s_3bb4399e6eb111::t_c2ed26e288a69a 170-237
+  s_3bb4399e6eb111::t_7efac8de22f139 66,94,132,154
+src/oidc/discovery.ts
+  s_3bb4399e6eb111::t_d15d472162ff07 1-2,65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "c556742d930b9778829f5f0978acd28bd3e946c8",
+  "prompts": {},
+  "sessions": {
+    "s_3bb4399e6eb111": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "649c7314-41a3-473e-af93-fee0bf4c848f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Carlos Cima <camcima@users.noreply.github.com>"
+    }
+  }
+}
