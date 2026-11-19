@@ -1,0 +1,18 @@
+CHANGELOG.md
+  h_2468ad78f29ad1 7-12
+package-lock.json
+  h_2468ad78f29ad1 3,9
+package.json
+  h_2468ad78f29ad1 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "fb35643dc77bddb83e53aa181f1282247ff65ddd",
+  "prompts": {},
+  "humans": {
+    "h_2468ad78f29ad1": {
+      "author": "Carlos Cima <camcima@users.noreply.github.com>"
+    }
+  }
+}
