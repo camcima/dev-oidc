@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0](https://github.com/camcima/dev-oidc/compare/v0.7.0...v0.8.0) (2026-11-18)
+
+### Features
+
+* **oidc:** honor response_mode fragment and form_post ([#59](https://github.com/camcima/dev-oidc/issues/59)) ([08dea88](https://github.com/camcima/dev-oidc/commit/08dea8855d9f0b65593e4385df432ea5bd954870))
+
 ## [0.7.0](https://github.com/camcima/dev-oidc/compare/v0.6.0...v0.7.0) (2026-09-27)
 
 ### ⚠ BREAKING CHANGES
