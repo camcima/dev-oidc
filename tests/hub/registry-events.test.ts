@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTenantRegistry } from '@/hub/registry.js';
 import { makeTmpDir } from '../shared/tmp-dir.js';
 
@@ -36,7 +36,11 @@ describe('tenant config reload emits exactly one profilesChanged', () => {
       { id: 'alice', name: 'Alice' },
       { id: 'bob', name: 'Bob' },
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // Wait for the reload itself, which a busy machine can make slower than
+    // any fixed sleep, then leave a settle window in which a duplicate would
+    // show up.
+    await vi.waitFor(() => expect(events).toContain('app'), { timeout: 5_000, interval: 20 });
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     expect(events).toEqual(['app']);
     await reg.closeAll();
