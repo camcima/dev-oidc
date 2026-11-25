@@ -98,7 +98,7 @@ Field-by-field guidance for the wire-up case:
 - `signingKey.source` — leave as `"generate"` for first wire-up. If the user already complains about re-login on every restart, set `"file:./.dev-oidc/signing-key.json"` (or `"file:/data/signing-key.json"` for Docker — see [Persist the signing key across restarts](#persist-the-signing-key-across-restarts)). Note: relative `file:` paths now resolve against the project config file's directory, not the process CWD.
 - `subjectClaim` — `"oid"` for MSAL/Entra, `"sub"` (the default) otherwise.
 - `clients` — one entry per client app (frontend). Use the `clientId`, redirect URI(s), and `audience` from step 1 verbatim. Redirect URIs are exact-match — copy strings byte-for-byte, no trailing-slash normalization.
-- `profiles` — start with two or three sample users (`alice`, `bob`, optionally `admin`). One profile should carry an extra claim under `claims` to demonstrate the merge behavior (e.g. `{ "role": "admin" }`).
+- `profiles` — start with two or three sample users (`alice`, `bob`, optionally `admin`). One profile should carry an extra claim under `claims` to demonstrate the merge behavior (e.g. `{ "role": "admin" }`). Give each profile a `description` saying what that test person can do (`"Portal admin"`, `"Team leader · line manager"`, `"Outside the company, cannot sign in"`): it appears on their login card so whoever is testing knows whom to pick. It is optional, 1–200 characters, and **never** reaches a token or `/userinfo` — so don't use it for anything the app should read; that belongs in `claims`.
 
 **Do not** add `issuer`, `port`, or `host` to the file. They were valid in v0.1.x but the v0.2 schema rejects them with errors pointing at the replacement (CLI flags or hub.json).
 
@@ -252,11 +252,17 @@ Use this as the canonical starting point. Strip any fields that aren't needed; t
     },
   ],
   "profiles": [
-    { "id": "alice", "displayName": "Alice Developer", "email": "alice@example.com" },
+    {
+      "id": "alice",
+      "displayName": "Alice Developer",
+      "email": "alice@example.com",
+      "description": "Regular user, no special permissions", // Optional. Login card only, never in tokens.
+    },
     {
       "id": "bob",
       "displayName": "Bob Manager",
       "email": "bob@example.com",
+      "description": "Admin: can manage users",
       "claims": { "role": "admin" },
     },
   ],
@@ -346,6 +352,7 @@ For Hub mode set `tls: { hostnames: ["dev-oidc.localhost", "localhost"] }` in `h
       "id": "charlie", // Goes into `sub` (and `oid`, if subjectClaim is "oid").
       "displayName": "Charlie Tester",
       "email": "charlie@example.com",
+      "description": "QA tester, read-only access", // Optional. What this person can do; shown on the login card only.
       "claims": {
         "department": "QA",
         "role": "tester",

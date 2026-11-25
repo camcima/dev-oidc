@@ -36,10 +36,27 @@ const BrandingInner = z.strictObject({
 });
 const BrandingSchema = BrandingInner.default(BrandingInner.parse({}));
 
+/**
+ * Longest profile description, after trimming. It is a one-line hint on a
+ * login card (minimum 240px wide), not documentation: 200 characters is room
+ * for "Passenger Journey leader · line manager · can approve refunds" several
+ * times over while keeping a card from turning into a paragraph.
+ */
+export const PROFILE_DESCRIPTION_MAX_LENGTH = 200;
+
+/**
+ * Free-text hint shown on the login card so a tester knows whom to pick. It is
+ * not identity data: claims are built field by field in oidc/claims.ts, which
+ * never reads it, so it cannot reach a token or the userinfo response.
+ */
+export const profileDescription = (): z.ZodString =>
+  z.string().trim().min(1).max(PROFILE_DESCRIPTION_MAX_LENGTH);
+
 const ProfileSchema = z.strictObject({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.email(),
+  description: profileDescription().optional(),
   avatar: httpUrl().nullable().default(null),
   emailVerified: z.boolean().optional(),
   givenName: z.string().min(1).optional(),

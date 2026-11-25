@@ -136,3 +136,67 @@ describe('renderLoginPage', () => {
     expect(html).toContain('href="/admin/acme"');
   });
 });
+
+describe('renderLoginPage profile description', () => {
+  const render = (ps: Parameters<typeof renderLoginPage>[0]['profiles']): string =>
+    renderLoginPage({
+      pendingAuthId: 'abc123',
+      profiles: ps,
+      branding,
+      actionUrl: '/authorize/complete',
+      adminUrl: '/admin',
+    });
+
+  // Byte-for-byte what v0.8.0 rendered for these two profiles. A profile
+  // without a description must keep producing exactly this markup.
+  const V080_GRID =
+    '<div class="grid"><form class="tile" method="post" action="/authorize/complete">\n' +
+    '      <input type="hidden" name="pendingAuthId" value="abc123" />\n' +
+    '      <input type="hidden" name="profileId" value="alice" />\n' +
+    '      <button type="submit" class="tile">\n' +
+    '        <div class="name">Alice</div>\n' +
+    '        <div class="email">alice@example.com</div>\n' +
+    '      </button>\n' +
+    '    </form><form class="tile" method="post" action="/authorize/complete">\n' +
+    '      <input type="hidden" name="pendingAuthId" value="abc123" />\n' +
+    '      <input type="hidden" name="profileId" value="bob" />\n' +
+    '      <button type="submit" class="tile">\n' +
+    '        <div class="name">Bob</div>\n' +
+    '        <div class="email">bob@example.com</div>\n' +
+    '      </button>\n' +
+    '    </form></div>';
+
+  it('renders cards without a description exactly as v0.8.0 did', () => {
+    expect(render(profiles)).toContain(V080_GRID);
+  });
+
+  it('shows the description under the email, styled like the email line', () => {
+    const html = render([{ ...profiles[0]!, description: 'Portal admin' }]);
+    expect(html).toContain(
+      '        <div class="email">alice@example.com</div>\n' +
+        '        <div class="description">Portal admin</div>\n' +
+        '      </button>',
+    );
+    expect(html).toMatch(/\.tile \.description \{[^}]*color: #667085;[^}]*font-size: 0\.875rem;/);
+  });
+
+  it('only adds the description line to the cards that have one', () => {
+    const html = render([{ ...profiles[0]!, description: 'Portal admin' }, profiles[1]!]);
+    expect(html.match(/class="description"/g)).toHaveLength(1);
+    expect(html).toContain(
+      '        <div class="name">Bob</div>\n' +
+        '        <div class="email">bob@example.com</div>\n' +
+        '      </button>',
+    );
+  });
+
+  it('escapes HTML and quotes in the description', () => {
+    const html = render([
+      { ...profiles[0]!, description: `<script>alert("x")</script> O'Brian's team` },
+    ]);
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain(
+      '<div class="description">&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; O&#39;Brian&#39;s team</div>',
+    );
+  });
+});

@@ -333,3 +333,53 @@ describe('client allowedScopes', () => {
     expect(parsed.clients[0]!.allowedScopes).toEqual(['profile', 'email']);
   });
 });
+
+describe('profile description', () => {
+  it('accepts an optional description and trims it', () => {
+    const parsed = ConfigSchema.parse(baseConfig({ description: '  Portal admin  ' }));
+    expect(parsed.profiles[0]!.description).toBe('Portal admin');
+  });
+
+  it('adds no description key when the profile has none (no default)', () => {
+    const parsed = ConfigSchema.parse(baseConfig({}));
+    expect(Object.keys(parsed.profiles[0]!)).not.toContain('description');
+  });
+
+  it('rejects an empty or whitespace-only description', () => {
+    expect(ConfigSchema.safeParse(baseConfig({ description: '' })).success).toBe(false);
+    expect(ConfigSchema.safeParse(baseConfig({ description: '   ' })).success).toBe(false);
+  });
+
+  it('accepts 200 characters and rejects 201', () => {
+    expect(ConfigSchema.safeParse(baseConfig({ description: 'x'.repeat(200) })).success).toBe(true);
+    expect(ConfigSchema.safeParse(baseConfig({ description: 'x'.repeat(201) })).success).toBe(
+      false,
+    );
+  });
+
+  it('rejects a non-string description', () => {
+    expect(ConfigSchema.safeParse(baseConfig({ description: 42 })).success).toBe(false);
+    expect(ConfigSchema.safeParse(baseConfig({ description: null })).success).toBe(false);
+  });
+
+  it('parses a v0.8.0 config (no description anywhere) to the same shape as before', () => {
+    const parsed = ConfigSchema.parse({
+      signingKey: { kid: 'k1' },
+      clients: [{ clientId: 'app', redirectUris: ['http://localhost:3000/cb'], audience: 'api' }],
+      profiles: [
+        { id: 'alice', displayName: 'Alice', email: 'alice@example.com' },
+        { id: 'bob', displayName: 'Bob', email: 'bob@example.com', claims: { role: 'x' } },
+      ],
+    });
+    expect(parsed.profiles).toStrictEqual([
+      { id: 'alice', displayName: 'Alice', email: 'alice@example.com', avatar: null, claims: {} },
+      {
+        id: 'bob',
+        displayName: 'Bob',
+        email: 'bob@example.com',
+        avatar: null,
+        claims: { role: 'x' },
+      },
+    ]);
+  });
+});

@@ -313,6 +313,7 @@ Every field in `dev-oidc.config.json`:
       "id": "alice", // Goes into the `sub` (or `oid`) claim.
       "displayName": "Alice Developer",
       "email": "alice@example.com",
+      "description": "Portal admin", // Optional. Shown on the login card only — see below.
       "avatar": null, // Optional URL, default null.
       "claims": {
         // Optional. Merged into every JWT for this profile.
@@ -323,6 +324,8 @@ Every field in `dev-oidc.config.json`:
   ],
 }
 ```
+
+`profiles[].description` is a short free-text hint (1–200 characters after trimming) shown on the person's login card under their email, so whoever is testing knows whom to pick: `"Portal admin"`, `"Passenger Journey leader · line manager"`, `"Outside the company, cannot sign in"`. It is **not** identity data: it never appears in the ID token, the access token, a refreshed token or the userinfo response, whatever the claim mapping. Profiles without it look exactly as before. If you do want a claim named `description` in your tokens, put it in `claims` like any other custom claim.
 
 The canonical schema lives in [`src/config/schema.ts`](https://github.com/camcima/dev-oidc/blob/main/src/config/schema.ts) — it validates every config file on load and on hot reload, so typos fail fast with a zod error pointing at the bad field.
 
@@ -465,7 +468,7 @@ CORS allows loopback origins (`localhost`, `*.localhost`, `127.0.0.0/8`, `[::1]`
 Visit `http://localhost:8095/admin` to:
 
 - View all configured profiles.
-- Add, edit, or delete profiles. Each change is applied to the config file as it currently is on disk and written atomically, so an edit you saved a moment earlier is kept. If the file does not validate at that moment, the admin API answers `409 config_invalid` and leaves it untouched.
+- Add, edit, or delete profiles, including the optional **Description** shown on the login card (it is never sent in tokens). Leaving it blank removes it. Each change is applied to the config file as it currently is on disk and written atomically, so an edit you saved a moment earlier is kept. If the file does not validate at that moment, the admin API answers `409 config_invalid` and leaves it untouched.
 - View the full raw config.
 
 The admin UI subscribes to a Server-Sent Events stream at `/admin/events`. When the JSON config file is edited externally (by another tool, another human, or a coding agent), a "Config changed on disk" banner appears so you can reload.
