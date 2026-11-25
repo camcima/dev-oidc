@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0](https://github.com/camcima/dev-oidc/compare/v0.8.0...v0.9.0) (2026-11-25)
+
+### Features
+
+* **profiles:** add optional description shown on the login card ([#62](https://github.com/camcima/dev-oidc/issues/62)) ([34b2349](https://github.com/camcima/dev-oidc/commit/34b2349bc745ab58e2a052d33c3904469205a46c))
+
 ## [0.8.0](https://github.com/camcima/dev-oidc/compare/v0.7.0...v0.8.0) (2026-11-18)
 
 ### Features
