@@ -17,6 +17,9 @@ export function renderLoginPage(input: RenderLoginPageInput): string {
     ? html`<img class="logo" src="${branding.logoUrl}" alt="${branding.title} logo" />`
     : '';
 
+  // The description line, newline and indent included, is emitted only when
+  // the profile has one, so a card without it is byte-for-byte the v0.8.0
+  // markup.
   // prettier-ignore
   const tiles = profiles.map(
     (p) => html`<form class="tile" method="post" action="${actionUrl}">
@@ -24,7 +27,8 @@ export function renderLoginPage(input: RenderLoginPageInput): string {
       <input type="hidden" name="profileId" value="${p.id}" />
       <button type="submit" class="tile">
         <div class="name">${p.displayName}</div>
-        <div class="email">${p.email}</div>
+        <div class="email">${p.email}</div>${p.description !== undefined && html`
+        <div class="description">${p.description}</div>`}
       </button>
     </form>`,
   );

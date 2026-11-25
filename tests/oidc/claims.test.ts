@@ -149,4 +149,17 @@ describe('assembleClaims', () => {
     expect(claims.azp).toBeUndefined(); // azp is managed/added by token.ts, never from custom claims
     expect(claims.department).toBe('Eng');
   });
+
+  it('never emits the profile description, whatever the destination or scope', () => {
+    for (const destination of ['id_token', 'userinfo', 'access_token'] as const) {
+      const claims = assembleClaims({
+        profile: { ...profile, description: 'Portal admin' },
+        subjectClaim: 'oid',
+        scope: 'openid profile email',
+        destination,
+      });
+      expect(Object.keys(claims), destination).not.toContain('description');
+      expect(Object.values(claims), destination).not.toContain('Portal admin');
+    }
+  });
 });

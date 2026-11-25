@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { loadConfig } from '@/config/loader.js';
 import { withConfigLock } from '@/config/mutex.js';
 import { writeConfigFile } from '@/config/writer.js';
-import type { Config, Profile } from '@/config/schema.js';
+import { profileDescription, type Config, type Profile } from '@/config/schema.js';
 import type { ActiveTenantState } from '@/hub/tenant-state.js';
 import { httpUrl } from '@/shared/url-schema.js';
 
@@ -12,6 +12,16 @@ export interface ProfilesRoutesDeps {
   pathPrefix?: string;
 }
 
+// The admin form submits a blank description as null, but an API caller may
+// send "" or whitespace for the same intent. Anything that trims to nothing is
+// therefore read as null ("no description"); everything else gets the config
+// schema's own trim and length rules, so the API cannot store what a config
+// file would reject.
+const DescriptionInput = z.preprocess(
+  (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+  profileDescription().nullish(),
+);
+
 // Optional fields accept null as well as absence: the admin form submits null
 // for a field the user left blank, and a create call should treat that the
 // same as omitting it.
@@ -19,6 +29,7 @@ const ProfileInput = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.email(),
+  description: DescriptionInput,
   avatar: httpUrl().nullish(),
   emailVerified: z.boolean().nullish(),
   givenName: z.string().min(1).nullish(),
@@ -33,6 +44,9 @@ function toProfile(input: z.infer<typeof ProfileInput>): Profile {
     id: input.id,
     displayName: input.displayName,
     email: input.email,
+    // Spread rather than `description: undefined`, so a profile created
+    // without one has no description key at all, matching a parsed config.
+    ...(input.description != null && { description: input.description }),
     avatar: input.avatar ?? null,
     emailVerified: input.emailVerified ?? undefined,
     givenName: input.givenName ?? undefined,
@@ -52,6 +66,7 @@ const ProfilePatch = z.object({
   id: z.string().min(1),
   displayName: z.string().min(1),
   email: z.email(),
+  description: DescriptionInput,
   avatar: httpUrl().nullish(),
   emailVerified: z.boolean().nullish(),
   givenName: z.string().min(1).nullish(),
@@ -68,6 +83,8 @@ function mergeProfile(existing: Profile, patch: z.infer<typeof ProfilePatch>): P
     displayName: patch.displayName,
     email: patch.email,
   };
+  if (patch.description === null) delete next.description;
+  else if (patch.description !== undefined) next.description = patch.description;
   if (patch.avatar !== undefined) next.avatar = patch.avatar;
   if (patch.emailVerified !== undefined) next.emailVerified = patch.emailVerified ?? undefined;
   if (patch.givenName !== undefined) next.givenName = patch.givenName ?? undefined;

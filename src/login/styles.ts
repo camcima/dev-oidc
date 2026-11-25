@@ -20,6 +20,7 @@ export const STATIC_STYLES = `
   button.tile:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tile .name { font-weight: 600; margin-bottom: 0.25rem; }
   .tile .email { color: #667085; font-size: 0.875rem; }
+  .tile .description { color: #667085; font-size: 0.875rem; margin-top: 0.25rem; }
   .admin-link {
     display: inline-block; margin-top: 2rem;
     color: #667085; font-size: 0.875rem; text-decoration: none;

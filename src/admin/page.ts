@@ -1,4 +1,4 @@
-import type { Config, Profile } from '@/config/schema.js';
+import { PROFILE_DESCRIPTION_MAX_LENGTH, type Config, type Profile } from '@/config/schema.js';
 import { redactSecrets } from '@/admin/profiles-routes.js';
 import { Html, html, renderToString } from '@/shared/html.js';
 
@@ -23,6 +23,7 @@ const STYLES = `
   form.edit { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; align-items: center; max-width: 600px; background: #fff; padding: 1rem; border: 1px solid #d0d5dd; border-radius: 8px; }
   form.edit input, form.edit textarea { font: inherit; padding: 0.375rem 0.5rem; border: 1px solid #d0d5dd; border-radius: 4px; }
   form.edit textarea { min-height: 4rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; }
+  form.edit .hint { grid-column: 2; margin-top: -0.25rem; color: #667085; font-size: 0.8125rem; }
   form.edit .wide { grid-column: 1 / -1; display: flex; gap: 0.5rem; justify-content: flex-end; }
   .banner { background: #fef7c3; border: 1px solid #fec84b; padding: 0.5rem 1rem; border-radius: 6px; margin-bottom: 1rem; display: none; }
   .banner.visible { display: block; }
@@ -41,7 +42,18 @@ const SAFE_STYLES = new Html(STYLES); // module-level const string literal, neve
 // mergeProfile in admin/profiles-routes.ts.
 function optionalFieldRows(suffix: string, profile?: Profile): Html {
   const verified = profile?.emailVerified;
-  return html`<label for="givenName-${suffix}">Given name</label>
+  return html`<label for="description-${suffix}">Description</label>
+    <input
+      name="description"
+      id="description-${suffix}"
+      maxlength="${PROFILE_DESCRIPTION_MAX_LENGTH}"
+      aria-describedby="description-hint-${suffix}"
+      value="${profile?.description ?? ''}"
+    />
+    <small class="hint" id="description-hint-${suffix}"
+      >Shown on the login page only; never sent in tokens.</small
+    >
+    <label for="givenName-${suffix}">Given name</label>
     <input name="givenName" id="givenName-${suffix}" value="${profile?.givenName ?? ''}" />
     <label for="familyName-${suffix}">Family name</label>
     <input name="familyName" id="familyName-${suffix}" value="${profile?.familyName ?? ''}" />
@@ -201,7 +213,7 @@ export function renderAdminPage(input: RenderAdminPageInput): string {
       const url = form.dataset.api;
       let body = undefined;
       if (method === 'POST' || method === 'PUT') {
-        const optional = ['givenName', 'familyName', 'avatar', 'locale', 'hostedDomain'];
+        const optional = ['description', 'givenName', 'familyName', 'avatar', 'locale', 'hostedDomain'];
         const data = {};
         for (const el of form.elements) {
           const editable = el instanceof HTMLInputElement

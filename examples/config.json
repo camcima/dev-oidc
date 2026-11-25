@@ -24,6 +24,7 @@
       "id": "bob",
       "displayName": "Bob",
       "email": "bob@example.com",
+      "description": "Admin: has the admin role claim",
       "claims": { "role": "admin" }
     }
   ]

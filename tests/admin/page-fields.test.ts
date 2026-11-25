@@ -85,3 +85,58 @@ describe('admin page redacts client secrets in its raw-config dump', () => {
     expect(html).not.toContain('[redacted]');
   });
 });
+
+describe('admin profile description field', () => {
+  function withDescription(description: string): Config {
+    const c = config();
+    return { ...c, profiles: [{ ...c.profiles[0]!, description }] };
+  }
+
+  it('offers a Description input on both the edit and add forms', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toContain('<label for="description-alice">Description</label>');
+    expect(html).toContain('<label for="description-new">Description</label>');
+    expect(html.split('name="description"').length - 1).toBe(2);
+  });
+
+  it('caps the input at the schema length limit', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toMatch(/name="description"[^>]*maxlength="200"/);
+  });
+
+  it('explains that the description is shown on the login page only', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toMatch(
+      /aria-describedby="description-hint-alice"[\s\S]*id="description-hint-alice"[^>]*>Shown on the login page only; never sent in tokens\.</,
+    );
+    expect(html).toContain('id="description-hint-new"');
+  });
+
+  it('pre-populates the edit input with the stored description', () => {
+    const html = renderAdminPage({ config: withDescription('Portal admin'), slug: '(legacy)' });
+    expect(html).toMatch(/id="description-alice"[^>]*value="Portal admin"/);
+  });
+
+  it('leaves the input empty when the profile has no description', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toMatch(/id="description-alice"[^>]*value=""/);
+  });
+
+  it('escapes HTML and quotes in the description', () => {
+    const hostile = `<script>alert("x")</script> O'Brian`;
+    const html = renderAdminPage({ config: withDescription(hostile), slug: '(legacy)' });
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('value="&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; O&#39;Brian"');
+  });
+
+  it('submits a blank description as null so the API removes it', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    expect(html).toMatch(/const optional = \[[^\]]*'description'[^\]]*\]/);
+  });
+
+  it('adds no description key to the raw-config dump of a config without one', () => {
+    const html = renderAdminPage({ config: config(), slug: '(legacy)' });
+    const dump = html.slice(html.indexOf('<div class="json">'));
+    expect(dump).not.toContain('"description"');
+  });
+});
