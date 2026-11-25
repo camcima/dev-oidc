@@ -1,0 +1,54 @@
+skills/dev-oidc-setup/SKILL.md
+  s_f7b9e67bd0e647::t_292613fc4ab8fe 101,255-260,265,355
+src/admin/page.ts
+  s_f7b9e67bd0e647::t_053d737930bfb9 1,26,45-56,216
+README.md
+  s_f7b9e67bd0e647::t_491e93dcade87e 316,328-329,471
+src/login/styles.ts
+  s_f7b9e67bd0e647::t_ec1803e8edfe40 23
+tests/config/profile-type.test.ts
+  s_f7b9e67bd0e647::t_a958a6a83e36a2 1-23
+tests/integration/profile-description.test.ts
+  s_f7b9e67bd0e647::t_eb5bb2d793f4db 210
+  s_f7b9e67bd0e647::t_00ffb461178aba 195
+  s_f7b9e67bd0e647::t_fd9b90474657d1 1-194,196-209,211-230
+tests/config/schema.test.ts
+  s_f7b9e67bd0e647::t_00ffb461178aba 354
+  s_f7b9e67bd0e647::t_7c2c0679cd5ab6 336-353,355-385
+tests/login/page.test.ts
+  s_f7b9e67bd0e647::t_481ccecbad8ce4 139-202
+examples/config.json
+  s_f7b9e67bd0e647::t_292613fc4ab8fe 27
+src/admin/profiles-routes.ts
+  s_f7b9e67bd0e647::t_d8c45b5b6763fb 6,15-24,32,47-49,69,86-87
+tests/oidc/claims.test.ts
+  s_f7b9e67bd0e647::t_a958a6a83e36a2 152-164
+src/config/schema.ts
+  s_f7b9e67bd0e647::t_634d67542c28b4 39-54,59
+tests/config/example-config.test.ts
+  s_f7b9e67bd0e647::t_634d67542c28b4 1-12
+tests/admin/page-fields.test.ts
+  s_f7b9e67bd0e647::t_00ffb461178aba 129
+  s_f7b9e67bd0e647::t_b33c1c0e6d04e2 88-128,130-142
+tests/admin/profile-description.test.ts
+  s_f7b9e67bd0e647::t_b5240856efcb29 1-197,203-204
+  s_f7b9e67bd0e647::t_45b0ffe03431ad 198-202
+src/login/page.ts
+  s_f7b9e67bd0e647::t_ec1803e8edfe40 20-22,30-31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.6",
+  "base_commit_sha": "50dffaac13f1a8dabe9a06ec3e405d93872d74da",
+  "prompts": {},
+  "sessions": {
+    "s_f7b9e67bd0e647": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "78af011c-5db4-40cf-a577-e3347a4aa9ee",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Carlos Cima <camcima@users.noreply.github.com>"
+    }
+  }
+}
