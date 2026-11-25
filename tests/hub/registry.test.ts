@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createTenantRegistry } from '@/hub/registry.js';
 import { makeTmpDir } from '../shared/tmp-dir.js';
 
@@ -256,8 +256,12 @@ describe('TenantRegistry events', () => {
       }),
     );
 
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(events.some((e) => e === 'profilesChanged:app')).toBe(true);
+    // Wait for the reload itself (chokidar + stability wait + 200ms debounce)
+    // rather than a fixed sleep, which a busy machine can outlast.
+    await vi.waitFor(() => expect(events).toContain('profilesChanged:app'), {
+      timeout: 5_000,
+      interval: 20,
+    });
 
     const tenant = reg.get('app');
     if (tenant?.status !== 'active') throw new Error('expected active');

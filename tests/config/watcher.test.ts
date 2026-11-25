@@ -1,8 +1,14 @@
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { watchConfig } from '@/config/watcher.js';
 import { makeTmpDir } from '../shared/tmp-dir.js';
+
+// A reload goes through chokidar's change event, a 50ms awaitWriteFinish
+// stability wait and the 50ms debounce. Under full-suite load that chain can
+// take well over the 250ms these tests used to sleep, so wait for the outcome
+// itself, with a ceiling generous enough for a busy machine.
+const WAIT = { timeout: 5_000, interval: 20 };
 
 function writeValidConfig(file: string, kid: string): void {
   writeFileSync(
@@ -37,9 +43,7 @@ describe('watchConfig', () => {
 
     writeValidConfig(file, 'k2');
 
-    await new Promise((resolve) => setTimeout(resolve, 250));
-
-    expect(events).toContain('k2');
+    await vi.waitFor(() => expect(events).toContain('k2'), WAIT);
     await watcher.close();
   });
 
@@ -56,9 +60,8 @@ describe('watchConfig', () => {
     });
 
     writeFileSync(file, 'not json');
-    await new Promise((resolve) => setTimeout(resolve, 250));
 
-    expect(errors.length).toBeGreaterThanOrEqual(1);
+    await vi.waitFor(() => expect(errors.length).toBeGreaterThanOrEqual(1), WAIT);
     expect(reloads).toHaveLength(0);
     await watcher.close();
   });
