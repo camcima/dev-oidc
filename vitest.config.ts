@@ -20,6 +20,13 @@ export default defineConfig({
     // regressions still fail loudly without false positives from cold-start
     // module evaluation.
     testTimeout: 15_000,
+    // `vitest run` defaults to one worker per CPU thread minus one (21 on a
+    // 22-thread machine). Many tests are timing-sensitive (file watchers,
+    // TTLs, servers), and at that load they compete with each other and with
+    // whatever else the machine is doing, as in a release preflight. Half the
+    // threads leaves headroom; a percentage scales with the machine (CI's
+    // smaller runners included). Override with `--maxWorkers` when needed.
+    maxWorkers: '50%',
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
